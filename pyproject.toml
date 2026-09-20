@@ -14,6 +14,12 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+excel = ["openpyxl>=3.1"]
+system = ["psutil>=5.9"]
+all = ["openpyxl>=3.1", "psutil>=5.9"]
+
+[project.scripts]
+cfi-experiment = "cfi_experiment_logger.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

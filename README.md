@@ -382,3 +382,10 @@ This is an experimental research project.
 The project does not currently claim to have achieved frontier-level AI capability or to have demonstrated that such capability can be achieved on consumer hardware.
 
 Those are the questions being investigated.
+
+
+## Experiment Tracking
+
+The repository includes a local experiment logger under `src/cfi_experiment_logger/`. It creates machine-readable records for experiments, samples hardware resources, imports training metrics, records held-out evaluation, and generates project-wide CSV/Excel registries plus Markdown reports.
+
+See `docs/experiments/README.md` for the workflow.
