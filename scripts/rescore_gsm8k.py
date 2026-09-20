@@ -30,7 +30,7 @@ def canonical_number(value: str | None) -> str | None:
 
 def extract_explicit(text: str) -> str | None:
     matches = re.findall(
-        r"(?:The answer is|####)\s*([-+]?(?:\d+(?:\.\d+)?))",
+        r"(?:The answer is|####)\s*:?\s*<?\s*\$?\s*([-+]?\d[\d,]*(?:\.\d+)?)\s*>?",
         text,
         re.IGNORECASE,
     )
@@ -38,11 +38,11 @@ def extract_explicit(text: str) -> str | None:
 
 
 def extract_flexible(text: str) -> str | None:
-    # Match the final numeric token in the response, ignoring commas and
-    # dollar signs. This mirrors the common flexible GSM8K evaluation style.
+    # Fallback only: use the last numeric token when no explicit final-answer
+    # marker is present. Commas and currency symbols are normalized.
     matches = re.findall(
-        r"[-+]?(?:\d+(?:\.\d+)?|\.\d+)",
-        text.replace(",", "").replace("$", ""),
+        r"[-+]?\d[\d,]*(?:\.\d+)?",
+        text,
     )
     return canonical_number(matches[-1]) if matches else None
 
