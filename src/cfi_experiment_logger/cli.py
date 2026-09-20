@@ -118,19 +118,28 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "monitor":
-        count = monitor_to_file(
-            logger.hardware_path,
-            interval_seconds=args.interval,
-            stop_after_seconds=args.duration,
-        )
-        print(f"Captured {count} hardware samples into {logger.hardware_path}")
+        try:
+            count = monitor_to_file(
+                logger.hardware_path,
+                interval_seconds=args.interval,
+                stop_after_seconds=args.duration,
+            )
+            print(f"Captured {count} hardware samples into {logger.hardware_path}")
+        except KeyboardInterrupt:
+            print(f"Hardware monitoring stopped. Samples are in {logger.hardware_path}")
         return 0
 
     if args.command == "finalize":
         summary = logger.finalize(args.status, notes=args.notes)
-        csv_path = export_registry_csv(args.root, Path(args.root).parent / "results" / "CFI_Experiment_Registry.csv")
+        results_dir = Path(args.root).parent / "results"
+        csv_path = export_registry_csv(args.root, results_dir / "CFI_Experiment_Registry.csv")
         print(json.dumps(summary, indent=2))
         print(f"Registry CSV: {csv_path}")
+        try:
+            xlsx_path = export_registry_xlsx(args.root, results_dir / "CFI_Experiment_Registry.xlsx")
+            print(f"Registry XLSX: {xlsx_path}")
+        except RuntimeError as exc:
+            print(f"Registry XLSX skipped: {exc}")
         return 0
 
     if args.command == "export":
