@@ -45,3 +45,19 @@ def test_experiment_lifecycle(tmp_path: Path):
     output = tmp_path / "registry.csv"
     export_registry_csv(root, output)
     assert output.exists()
+
+
+def test_cli_export_without_experiment_id(tmp_path: Path, monkeypatch):
+    from cfi_experiment_logger.cli import main
+
+    root = tmp_path / "experiments"
+    results = tmp_path / "results"
+    monkeypatch.chdir(tmp_path)
+
+    assert main([
+        "export",
+        "--root", str(root),
+        "--results", str(results),
+        "--no-xlsx",
+    ]) == 0
+    assert (results / "CFI_Experiment_Registry.csv").exists()
