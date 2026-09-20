@@ -61,3 +61,45 @@ def test_cli_export_without_experiment_id(tmp_path: Path, monkeypatch):
         "--no-xlsx",
     ]) == 0
     assert (results / "CFI_Experiment_Registry.csv").exists()
+
+def test_import_huggingface_trainer_state(tmp_path: Path):
+    from cfi_experiment_logger.core import normalize_metric_record, read_tabular_file
+
+    root = tmp_path / "experiments"
+    logger = ExperimentLogger("EXP-TEST-TRAINER-STATE", root)
+    logger.initialize(
+        {
+            "model": "Qwen3-4B-Base",
+            "method": "QLoRA",
+            "training": {"max_steps": 250, "context_length": 2048},
+        }
+    )
+
+    trainer_state = tmp_path / "trainer_state.json"
+    trainer_state.write_text(
+        """{"global_step": 250,
+        "log_history": [
+          {"loss": 1.9, "learning_rate": 1e-6, "grad_norm": 0.9,
+           "step": 249, "num_input_tokens_seen": 234685},
+          {"loss": 1.790812, "learning_rate": 2.024e-8, "grad_norm": 0.806,
+           "step": 250, "num_input_tokens_seen": 235748}
+        ],
+        "train_runtime": 710.2224,
+        "train_tokens_per_second": 331.935}""",
+        encoding="utf-8",
+    )
+
+    records = [
+        normalize_metric_record(record)
+        for record in read_tabular_file(trainer_state)
+    ]
+    logger.import_metrics(records)
+    summary = logger.finalize()
+
+    assert summary["final_step"] == 250
+    assert summary["final_loss"] == 1.790812
+    assert summary["final_learning_rate"] == 2.024e-8
+    assert summary["total_tokens"] == 235748.0
+    assert summary["tokens_per_second"] == 331.935
+    assert summary["duration_seconds"] == 710.2224
+    assert summary["training_event_count"] == 3

@@ -198,8 +198,8 @@ class ExperimentLogger:
 
         started = _parse_datetime(config.get("started_at"))
         completed = _parse_datetime(config.get("completed_at"))
-        duration_seconds = None
-        if started and completed:
+        duration_seconds = _last_metric(training_events, "runtime_seconds")
+        if duration_seconds is None and started and completed:
             duration_seconds = max(0.0, (completed - started).total_seconds())
 
         final_step = _last_metric(training_events, "step")
@@ -351,7 +351,20 @@ def read_tabular_file(path: Path) -> list[dict[str, Any]]:
         if isinstance(value, list):
             return [row for row in value if isinstance(row, dict)]
         if isinstance(value, dict):
-            for key in ("history", "metrics", "log_history", "records", "events"):
+            # Hugging Face Trainer/Unsloth trainer_state.json stores step-level
+            # metrics under log_history and run-level throughput at top level.
+            log_history = value.get("log_history")
+            if isinstance(log_history, list):
+                records = [row for row in log_history if isinstance(row, dict)]
+                run_metadata = {
+                    key: value[key]
+                    for key in ("train_runtime", "train_tokens_per_second")
+                    if key in value
+                }
+                if run_metadata:
+                    records.append(run_metadata)
+                return records
+            for key in ("history", "metrics", "records", "events"):
                 nested = value.get(key)
                 if isinstance(nested, list):
                     return [row for row in nested if isinstance(row, dict)]
@@ -379,6 +392,9 @@ _KEY_ALIASES = {
     "throughput": "tokens_per_sec",
     "elapsed_seconds": "elapsed_seconds",
     "elapsed": "elapsed_seconds",
+    "runtime_seconds": "runtime_seconds",
+    "train_runtime": "runtime_seconds",
+    "train_tokens_per_second": "tokens_per_sec",
 }
 
 def normalize_metric_record(record: dict[str, Any]) -> dict[str, Any]:
