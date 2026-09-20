@@ -54,20 +54,16 @@ except ImportError:
     collect_hardware_snapshot = None
 
 
-DEFAULT_MODEL = (
-    Path(r"E:\Titan Forge Industries\CFI-Data\HuggingFace\hub\"
-         r"models--Qwen--Qwen3-4B-Base\snapshots\"
-         r"906bfd4b4dc7f14ee4320094d8b41684abff8539")
+DEFAULT_MODEL = Path(
+    r"E:\Titan Forge Industries\CFI-Data\HuggingFace\hub\models--Qwen--Qwen3-4B-Base\snapshots\906bfd4b4dc7f14ee4320094d8b41684abff8539"
 )
 
-DEFAULT_DATASET = (
-    Path(r"E:\Titan Forge Industries\CFI-Data\Datasets\"
-         r"CFI-Eval-0001-GSM8K\gsm8k_test_100.jsonl")
+DEFAULT_DATASET = Path(
+    r"E:\Titan Forge Industries\CFI-Data\Datasets\CFI-Eval-0001-GSM8K\gsm8k_test_100.jsonl"
 )
 
-DEFAULT_OUTPUT = (
-    Path(r"E:\Titan Forge Industries\CFI-Data\Results\"
-         r"CFI-Eval-0001-GSM8K")
+DEFAULT_OUTPUT = Path(
+    r"E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0001-GSM8K"
 )
 
 MAX_NEW_TOKENS_DEFAULT = 512
