@@ -46,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     import_metrics = subparsers.add_parser(
         "import-metrics",
-        help="Import CSV, JSON, or JSONL training logs.",
+        help="Import CSV, JSON, JSONL, or Hugging Face trainer_state.json logs.",
     )
     import_metrics.add_argument("experiment_id")
     import_metrics.add_argument("metrics_file")
