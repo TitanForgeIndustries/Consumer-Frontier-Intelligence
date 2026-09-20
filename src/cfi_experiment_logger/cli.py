@@ -94,9 +94,8 @@ def main(argv: list[str] | None = None) -> int:
         print(logger.path)
         return 0
 
-    logger = ExperimentLogger(args.experiment_id, args.root)
-
     if args.command == "record":
+        logger = ExperimentLogger(args.experiment_id, args.root)
         data = json.loads(args.data)
         if not isinstance(data, dict):
             raise SystemExit("--data must be a JSON object")
@@ -109,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "import-metrics":
+        logger = ExperimentLogger(args.experiment_id, args.root)
         records = [
             normalize_metric_record(record)
             for record in read_tabular_file(Path(args.metrics_file))
@@ -118,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "monitor":
+        logger = ExperimentLogger(args.experiment_id, args.root)
         try:
             count = monitor_to_file(
                 logger.hardware_path,
@@ -130,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "finalize":
+        logger = ExperimentLogger(args.experiment_id, args.root)
         summary = logger.finalize(args.status, notes=args.notes)
         results_dir = Path(args.root).parent / "results"
         csv_path = export_registry_csv(args.root, results_dir / "CFI_Experiment_Registry.csv")
