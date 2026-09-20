@@ -128,6 +128,12 @@ class ExperimentLogger:
         if config:
             payload.update(config)
         write_json(self.config_path, payload)
+        # Create the complete record skeleton immediately so every experiment
+        # has the same predictable on-disk structure even before metrics arrive.
+        self.events_path.touch(exist_ok=True)
+        self.hardware_path.touch(exist_ok=True)
+        if not self.evaluation_path.exists():
+            write_json(self.evaluation_path, {})
         return self.path
 
     def read_config(self) -> dict[str, Any]:
