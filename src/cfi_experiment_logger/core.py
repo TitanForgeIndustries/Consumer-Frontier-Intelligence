@@ -169,8 +169,9 @@ class ExperimentLogger:
         """Import normalized training/evaluation records from external logs."""
         count = 0
         for record in records:
-            kind = str(record.pop("kind", "training"))
-            self.record(kind, **record)
+            payload = dict(record)
+            kind = str(payload.pop("kind", "training"))
+            self.record(kind, **payload)
             count += 1
         return count
 
