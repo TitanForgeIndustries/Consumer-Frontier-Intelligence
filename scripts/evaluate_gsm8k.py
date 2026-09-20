@@ -192,7 +192,7 @@ def canonical_number(value: str | None) -> str | None:
 
 def extract_expected(answer_text: str) -> str | None:
     match = re.search(
-        r"####\s*([-+]?\d+(?:\.\d+)?)",
+        r"####\s*(?:<\s*)?\$?\s*([-+]?\d[\d,]*(?:\.\d+)?)\s*>?",
         answer_text,
         re.IGNORECASE,
     )
@@ -201,7 +201,7 @@ def extract_expected(answer_text: str) -> str | None:
 
 def extract_predicted(text: str) -> str | None:
     explicit = re.findall(
-        r"(?:The answer is|####)\s*([-+]?\d+(?:\.\d+)?)",
+        r"(?:The answer is|####)\s*:?\s*<?\s*\$?\s*([-+]?\d[\d,]*(?:\.\d+)?)\s*>?",
         text,
         re.IGNORECASE,
     )
@@ -215,11 +215,11 @@ def extract_predicted(text: str) -> str | None:
     ]
     for line in reversed(lines):
         match = re.fullmatch(
-            r"[-+]?\d+(?:\.\d+)?",
+            r"[-+]?\$?\s*\d[\d,]*(?:\.\d+)?",
             line,
         )
         if match:
-            return canonical_number(match.group(0))
+            return canonical_number(match.group(0).replace("$", "").strip())
 
     return None
 
