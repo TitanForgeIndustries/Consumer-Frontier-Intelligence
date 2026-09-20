@@ -386,6 +386,7 @@ _KEY_ALIASES = {
     "epoch": "epoch",
     "tokens": "tokens",
     "num_tokens": "tokens",
+    "num_input_tokens_seen": "tokens",
     "total_tokens": "tokens",
     "tokens_per_second": "tokens_per_sec",
     "tok_per_sec": "tokens_per_sec",
