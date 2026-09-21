@@ -711,6 +711,12 @@ def summarize(
                 layer = int(layer_text)
                 observations[layer] += 1
                 for key, value in metrics.items():
+                    if key in {
+                        "layer",
+                        "probe_top1_token_id",
+                        "final_top1_token_id",
+                    }:
+                        continue
                     if isinstance(value, (int, float)) and not isinstance(
                         value, bool
                     ):
@@ -783,9 +789,6 @@ def main() -> int:
     )
     if not probe_layers:
         raise ValueError("No valid probe layers were provided.")
-
-    if total_layers not in probe_layers:
-        probe_layers.append(total_layers)
 
     print("Model layers:", total_layers)
     print("Probe layers:", probe_layers)
