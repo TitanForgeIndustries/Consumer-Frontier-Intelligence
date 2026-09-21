@@ -409,12 +409,31 @@ def prefill(
     return output.past_key_values, output.logits[:, -1, :]
 
 
+def build_stop_token_sequences(tokenizer) -> list[list[int]]:
+    """Tokenize the canonical CFI generation stop strings once per run."""
+    sequences: list[list[int]] = []
+    for stop_string in ("\nQuestion:", "\nProblem:"):
+        token_ids = tokenizer.encode(stop_string, add_special_tokens=False)
+        if token_ids:
+            sequences.append(token_ids)
+    return sequences
+
+
+def has_stop_suffix(token_ids: list[int], stop_sequences: list[list[int]]) -> bool:
+    """Return True when generated token IDs end with a canonical stop sequence."""
+    for stop_sequence in stop_sequences:
+        if len(token_ids) >= len(stop_sequence) and token_ids[-len(stop_sequence) :] == stop_sequence:
+            return True
+    return False
+
+
 def draft_candidates(
     assistant_model,
     *,
     cache: DynamicCache,
     next_logits: torch.Tensor,
     eos_token_id: int | None,
+    stop_token_sequences: list[list[int]],
     num_tokens: int,
     warpers,
 ):
@@ -447,6 +466,8 @@ def draft_candidates(
         forward_calls += 1
 
         if eos_token_id is not None and token_id == eos_token_id:
+            break
+        if has_stop_suffix(tokens, stop_token_sequences):
             break
 
     return tokens, probabilities, cache, next_logits, forward_calls
@@ -486,6 +507,7 @@ def speculative_decode(
     prompt_ids: torch.Tensor,
     max_new_tokens: int,
     num_assistant_tokens: int,
+    stop_token_sequences: list[list[int]],
     warpers,
 ):
     if max_new_tokens <= 0:
@@ -531,6 +553,7 @@ def speculative_decode(
             cache=assistant_cache,
             next_logits=assistant_next_logits,
             eos_token_id=tokenizer.eos_token_id,
+            stop_token_sequences=stop_token_sequences,
             num_tokens=draft_count,
             warpers=warpers,
         )
@@ -611,7 +634,10 @@ def speculative_decode(
                 accepted_draft_tokens += 1
                 accepted_this_round += 1
 
-                if token_id == tokenizer.eos_token_id:
+                if (
+                    token_id == tokenizer.eos_token_id
+                    or has_stop_suffix(generated, stop_token_sequences)
+                ):
                     rejected = False
                     pending_target_token = None
                     break
@@ -659,13 +685,19 @@ def speculative_decode(
             assistant_next_logits = assistant_output.logits[:, -1, :]
             assistant_draft_forward_calls += 1
 
-            if replacement == tokenizer.eos_token_id:
+            if (
+                replacement == tokenizer.eos_token_id
+                or has_stop_suffix(generated, stop_token_sequences)
+            ):
                 pending_target_token = None
 
             break
 
         if rejected:
-            if generated[-1] == tokenizer.eos_token_id:
+            if (
+                generated[-1] == tokenizer.eos_token_id
+                or has_stop_suffix(generated, stop_token_sequences)
+            ):
                 break
             # The emitted replacement intentionally remains pending in the
             # target cache. It is consumed with the next verification block.
@@ -702,7 +734,10 @@ def speculative_decode(
         assistant_next_logits = assistant_output.logits[:, -1, :]
         assistant_draft_forward_calls += 1
 
-        if bonus == tokenizer.eos_token_id:
+        if (
+            bonus == tokenizer.eos_token_id
+            or has_stop_suffix(generated, stop_token_sequences)
+        ):
             pending_target_token = None
             break
 
@@ -783,6 +818,7 @@ def run_speculative(
     seed: int,
     max_new_tokens: int,
     num_assistant_tokens: int,
+    stop_token_sequences: list[list[int]],
     warpers,
 ):
     torch.manual_seed(seed)
@@ -804,6 +840,7 @@ def run_speculative(
         prompt_ids=inputs["input_ids"],
         max_new_tokens=max_new_tokens,
         num_assistant_tokens=num_assistant_tokens,
+        stop_token_sequences=stop_token_sequences,
         warpers=warpers,
     )
 
@@ -879,6 +916,7 @@ def main() -> int:
         top_p=args.top_p,
         top_k=args.top_k,
     )
+    stop_token_sequences = build_stop_token_sequences(tokenizer)
 
     print("Target layers:", total_layers)
     print("Assistant layers:", len(assistant_model.model.layers))
@@ -930,6 +968,7 @@ def main() -> int:
                 seed=seed,
                 max_new_tokens=args.max_new_tokens,
                 num_assistant_tokens=args.num_assistant_tokens,
+                stop_token_sequences=stop_token_sequences,
                 warpers=warpers,
             )
             assisted.update(
@@ -994,6 +1033,7 @@ def main() -> int:
             "top_p": args.top_p,
             "top_k": args.top_k,
             "seed_base": args.seed_base,
+            "stop_strings": ["\\nQuestion:", "\\nProblem:"],
         },
         "baseline": {
             "correct": base_correct,
