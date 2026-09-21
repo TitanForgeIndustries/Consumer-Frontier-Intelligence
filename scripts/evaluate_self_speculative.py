@@ -494,7 +494,9 @@ def safe_crop_cache(cache: DynamicCache, tokens_to_remove: int) -> list[int]:
             skipped.append(layer_idx)
             continue
 
-        layer.crop(tokens_to_remove)
+        # In Transformers 5.17+, negative values mean "remove this many tokens".
+        # Positive values are the legacy absolute-length form and emit a deprecation warning.
+        layer.crop(-tokens_to_remove)
 
     return skipped
 
