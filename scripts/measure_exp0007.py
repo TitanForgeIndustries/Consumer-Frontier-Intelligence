@@ -218,6 +218,28 @@ def _last_vector(tensor: torch.Tensor) -> torch.Tensor:
     raise ValueError(f"Unexpected tensor shape: {tuple(tensor.shape)}")
 
 
+def _first_input_tensor(
+    inputs: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> torch.Tensor:
+    for value in inputs:
+        if torch.is_tensor(value):
+            return value
+
+    for key in ("hidden_states", "hidden_state", "inputs_embeds"):
+        value = kwargs.get(key)
+        if torch.is_tensor(value):
+            return value
+
+    for value in kwargs.values():
+        if torch.is_tensor(value):
+            return value
+
+    raise TypeError(
+        "Could not find a tensor input in positional or keyword arguments."
+    )
+
+
 def _cosine(a: torch.Tensor, b: torch.Tensor) -> float:
     return float(
         F.cosine_similarity(
@@ -399,12 +421,15 @@ class Recorder:
         kind: str,
         _module,
         inputs,
+        kwargs,
         output,
     ) -> None:
         if not self.is_decode:
             return
 
-        input_tensor = _last_vector(inputs[0].detach())
+        input_tensor = _last_vector(
+            _first_input_tensor(inputs, kwargs).detach()
+        )
         output_tensor = _last_vector(_first_tensor(output))
 
         self.current.sublayers.setdefault(index, {})[kind] = (
@@ -502,18 +527,20 @@ class Recorder:
             )
             self.handles.append(
                 layer.self_attn.register_forward_hook(
-                    lambda module, inputs, output, i=index:
+                    lambda module, inputs, kwargs, output, i=index:
                     self.sublayer_hook(
-                        i, "attention", module, inputs, output
-                    )
+                        i, "attention", module, inputs, kwargs, output
+                    ),
+                    with_kwargs=True,
                 )
             )
             self.handles.append(
                 layer.mlp.register_forward_hook(
-                    lambda module, inputs, output, i=index:
+                    lambda module, inputs, kwargs, output, i=index:
                     self.sublayer_hook(
-                        i, "mlp", module, inputs, output
-                    )
+                        i, "mlp", module, inputs, kwargs, output
+                    ),
+                    with_kwargs=True,
                 )
             )
 
