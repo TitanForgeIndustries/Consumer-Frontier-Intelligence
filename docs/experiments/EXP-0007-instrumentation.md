@@ -37,6 +37,8 @@ The instrumented runtime is not a speed benchmark. Forward hooks and intermediat
 
 The first generated token is produced by the initial full-prompt (prefill) forward. The current decode instrumentation begins on the subsequent one-token forward steps, so a clean run should have exactly one fewer observed instrumentation step than generated tokens. Instrumentation samples are aligned to generated tokens 2..N, not token 1.
 
+Intermediate predictive probes call the model's lm_head internally. Those probe calls are excluded from token-step recording so each decode step contributes exactly one token record and one layer/sublayer record.
+
 ## Layer measurements
 
 Every observed decode step records for every layer:
