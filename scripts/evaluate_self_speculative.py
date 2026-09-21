@@ -372,6 +372,32 @@ def draft_candidates(
     return tokens, probabilities, cache, next_logits, forward_calls
 
 
+def safe_crop_cache(cache: DynamicCache, tokens_to_remove: int) -> list[int]:
+    """Crop only initialized KV layers.
+
+    Transformers 5.17's DynamicCache can hold lazy, uninitialized layer slots.
+    Its built-in DynamicLayer.crop() assumes keys/values are already tensors,
+    so calling Cache.crop() can fail with NoneType on an untouched slot.
+    Uninitialized slots contain no cached sequence to roll back and can be
+    skipped safely.
+    """
+    if tokens_to_remove <= 0:
+        return []
+
+    skipped: list[int] = []
+    for layer_idx, layer in enumerate(cache.layers):
+        keys = getattr(layer, "keys", None)
+        values = getattr(layer, "values", None)
+
+        if keys is None or values is None:
+            skipped.append(layer_idx)
+            continue
+
+        layer.crop(tokens_to_remove)
+
+    return skipped
+
+
 def speculative_decode(
     *,
     target_model,
@@ -533,8 +559,8 @@ def speculative_decode(
             remove_from_assistant = remove_from_target
 
             if remove_from_target > 0:
-                target_cache.crop(-remove_from_target)
-                assistant_cache.crop(-remove_from_assistant)
+                safe_crop_cache(target_cache, remove_from_target)
+                safe_crop_cache(assistant_cache, remove_from_assistant)
 
             replacement_tensor = torch.tensor(
                 [[replacement]],
