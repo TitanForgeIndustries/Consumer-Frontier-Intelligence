@@ -35,6 +35,8 @@ Defaults match the established CFI evaluation protocol:
 
 The instrumented runtime is not a speed benchmark. Forward hooks and intermediate projections add measurement overhead. Its latency must not be compared directly with the clean EXP-0006 or baseline evaluator.
 
+The first generated token is produced by the initial full-prompt (prefill) forward. The current decode instrumentation begins on the subsequent one-token forward steps, so a clean run should have exactly one fewer observed instrumentation step than generated tokens. Instrumentation samples are aligned to generated tokens 2..N, not token 1.
+
 ## Layer measurements
 
 Every observed decode step records for every layer:
@@ -100,7 +102,7 @@ Files:
 - questions.jsonl
 - hardware_samples.jsonl
 
-JSON and JSONL are the source of truth.
+JSON and JSONL are the source of truth. Hardware telemetry requires the repository package and its system dependency to be installed in the active environment.
 
 ## Five-question gate
 
@@ -121,7 +123,9 @@ python scripts/measure_exp0007.py --questions 5 --probe-layers 6 12 18 24 30 --m
 
 ## Full fixed-set run
 
-Run the 100-question version only after the 5-question gate completes cleanly and instrumentation counts align:
+Run the 100-question version only after the 5-question gate completes cleanly, the expected one-token prefill offset is accounted for, and there are no unexpected instrumentation mismatches:
+
+python -m pip install -e ".[system]"
 
 python scripts/measure_exp0007.py --questions 100
 
