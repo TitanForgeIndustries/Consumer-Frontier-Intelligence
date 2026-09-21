@@ -682,12 +682,18 @@ def run_question(
 
     generated_tokens = int(new_tokens.shape[-1])
     observed_steps = len(recorder.token_records)
-    alignment_steps = min(generated_tokens, observed_steps)
+
+    # The initial forward pass processes the full prompt and directly
+    # produces the first generated token. Our decode hooks intentionally
+    # measure only subsequent one-token decode forwards, so one generated
+    # token is expected to be outside the instrumentation stream.
+    expected_decode_steps = max(generated_tokens - 1, 0)
+    alignment_steps = min(expected_decode_steps, observed_steps)
 
     token_records = []
     for step in range(alignment_steps):
         record = dict(recorder.token_records[step])
-        token_id = int(new_tokens[step].item())
+        token_id = int(new_tokens[step + 1].item())
         record["sampled_token_id"] = token_id
         record["sampled_token"] = tokenizer.decode([token_id])
         token_records.append(record)
@@ -703,6 +709,8 @@ def run_question(
         "correct": predicted == expected,
         "elapsed_seconds": round(elapsed, 6),
         "generated_tokens": generated_tokens,
+        "prefill_generated_tokens": min(generated_tokens, 1),
+        "expected_decode_steps": expected_decode_steps,
         "observed_instrumentation_steps": observed_steps,
         "alignment_steps": alignment_steps,
         "forward_calls": recorder.forward_calls,
@@ -887,12 +895,16 @@ def main() -> int:
         {
             "index": item["index"],
             "generated_tokens": item["generated_tokens"],
+            "expected_decode_steps": max(
+                item["generated_tokens"] - 1,
+                0,
+            ),
             "observed_instrumentation_steps": item[
                 "observed_instrumentation_steps"
             ],
         }
         for item in results
-        if item["generated_tokens"]
+        if max(item["generated_tokens"] - 1, 0)
         != item["observed_instrumentation_steps"]
     ]
 
