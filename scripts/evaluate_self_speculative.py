@@ -1,17 +1,20 @@
-"""EXP-0006: benchmark native self-speculative decoding at layer 30.
+"""EXP-0006: benchmark shared-weight truncated-assistant speculative decoding.
 
-This compares ordinary 36-layer generation against Transformers' native
-self-speculative decoding, using the Qwen3-4B model's intermediate layer 30 as
-the assistant/early-exit path.
+Qwen3-4B-Base is not an early-exit-trained checkpoint. Therefore this
+experiment does NOT use Transformers' assistant_early_exit mechanism.
 
-The model weights are unchanged. The experiment uses the same 5-question
-feasibility gate, sampling settings, and seeds as the CFI GSM8K evaluator.
+Instead, it creates a lightweight 30-layer assistant object that SHARES the
+target model's loaded modules and weights. The ordinary assistant_model
+speculative-decoding path then lets the 30-layer assistant draft candidate
+tokens and the 36-layer target verify them.
+
+No model weights are changed or duplicated.
 """
 
 from __future__ import annotations
 
 import argparse
-import gc
+import copy
 import json
 import re
 import time
@@ -19,6 +22,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import torch
+import torch.nn as nn
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 
@@ -34,7 +38,7 @@ DEFAULT_OUTPUT = Path(
 
 
 def load_rows(path: Path, count: int) -> list[dict]:
-    rows = []
+    rows: list[dict] = []
     with path.open("r", encoding="utf-8") as handle:
         for line in handle:
             if line.strip():
@@ -112,18 +116,50 @@ def load_model(model_path: Path):
     return tokenizer, model
 
 
-def run_generation(
+def make_shared_weight_assistant(target_model, depth: int):
+    """Create a truncated assistant without duplicating loaded weights."""
+    total_layers = len(target_model.model.layers)
+    if depth <= 0 or depth >= total_layers:
+        raise ValueError(
+            f"Assistant depth must be between 1 and {total_layers - 1}."
+        )
+
+    assistant = copy.copy(target_model)
+    assistant.model = copy.copy(target_model.model)
+
+    # The assistant needs its own config because its cache must contain only
+    # the truncated number of layers. The target config remains at 36 layers.
+    assistant.config = copy.deepcopy(target_model.config)
+    assistant.model.config = assistant.config
+    assistant.config.num_hidden_layers = depth
+
+    # Share all actual module weights. Only the ModuleList container is new.
+    assistant.model.layers = nn.ModuleList(
+        list(target_model.model.layers[:depth])
+    )
+    assistant.model.embed_tokens = target_model.model.embed_tokens
+    assistant.model.norm = target_model.model.norm
+    assistant.lm_head = target_model.lm_head
+
+    assistant.generation_config = copy.deepcopy(target_model.generation_config)
+    assistant.generation_config.assistant_early_exit = None
+    assistant.generation_config.num_assistant_tokens = 4
+    assistant.eval()
+
+    return assistant
+
+
+def run_baseline(
     model,
     tokenizer,
     prompt: str,
     *,
     seed: int,
-    self_speculative: bool,
     max_new_tokens: int,
-    num_assistant_tokens: int,
 ):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
     inputs = tokenizer(prompt, return_tensors="pt").to("cuda:0")
     prompt_len = int(inputs["input_ids"].shape[-1])
 
@@ -131,28 +167,70 @@ def run_generation(
     torch.cuda.reset_peak_memory_stats()
     torch.cuda.synchronize()
 
-    kwargs = {
-        "max_new_tokens": max_new_tokens,
-        "do_sample": True,
-        "temperature": 0.6,
-        "top_p": 0.95,
-        "top_k": 20,
-        "pad_token_id": tokenizer.eos_token_id,
-        "use_cache": True,
+    start = time.perf_counter()
+    with torch.inference_mode():
+        output = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=True,
+            temperature=0.6,
+            top_p=0.95,
+            top_k=20,
+            pad_token_id=tokenizer.eos_token_id,
+            use_cache=True,
+        )
+    torch.cuda.synchronize()
+
+    elapsed = time.perf_counter() - start
+    new_tokens = output[0, prompt_len:]
+    text = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+
+    return {
+        "text": text,
+        "tokens": int(new_tokens.shape[-1]),
+        "elapsed_seconds": elapsed,
+        "tokens_per_second": (
+            int(new_tokens.shape[-1]) / elapsed if elapsed > 0 else 0.0
+        ),
+        "peak_vram_gib": torch.cuda.max_memory_allocated() / (1024**3),
     }
 
-    if self_speculative:
-        kwargs.update(
-            {
-                "assistant_early_exit": 30,
-                "num_assistant_tokens": num_assistant_tokens,
-                "num_assistant_tokens_schedule": "constant",
-            }
-        )
+
+def run_speculative(
+    model,
+    tokenizer,
+    assistant_model,
+    prompt: str,
+    *,
+    seed: int,
+    max_new_tokens: int,
+    num_assistant_tokens: int,
+):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    inputs = tokenizer(prompt, return_tensors="pt").to("cuda:0")
+    prompt_len = int(inputs["input_ids"].shape[-1])
+
+    torch.cuda.empty_cache()
+    torch.cuda.reset_peak_memory_stats()
+    torch.cuda.synchronize()
 
     start = time.perf_counter()
     with torch.inference_mode():
-        output = model.generate(**inputs, **kwargs)
+        output = model.generate(
+            **inputs,
+            assistant_model=assistant_model,
+            max_new_tokens=max_new_tokens,
+            num_assistant_tokens=num_assistant_tokens,
+            num_assistant_tokens_schedule="constant",
+            do_sample=True,
+            temperature=0.6,
+            top_p=0.95,
+            top_k=20,
+            pad_token_id=tokenizer.eos_token_id,
+            use_cache=True,
+        )
     torch.cuda.synchronize()
 
     elapsed = time.perf_counter() - start
@@ -189,12 +267,26 @@ def main() -> int:
 
     tokenizer, model = load_model(args.model)
 
+    total_layers = len(model.model.layers)
+    if total_layers != 36:
+        raise ValueError(
+            f"Expected Qwen3-4B-Base with 36 layers, found {total_layers}."
+        )
+
+    assistant_model = make_shared_weight_assistant(model, depth=30)
+
+    shared_param_check = (
+        assistant_model.model.layers[0].self_attn.q_proj.weight.data_ptr()
+        == model.model.layers[0].self_attn.q_proj.weight.data_ptr()
+    )
+
     baseline = []
     assisted = []
 
     print("GPU:", torch.cuda.get_device_name(0))
-    print("Model layers:", len(model.model.layers))
-    print("Self-speculative exit:", 30)
+    print("Target layers:", total_layers)
+    print("Assistant layers:", len(assistant_model.model.layers))
+    print("Shared weights:", shared_param_check)
     print("Assistant tokens:", args.num_assistant_tokens)
     print("Questions:", len(rows))
 
@@ -203,35 +295,37 @@ def main() -> int:
         expected = expected_answer(str(row["answer"]))
         prompt = prompt_for(str(row["question"]))
 
-        base = run_generation(
+        base = run_baseline(
             model,
             tokenizer,
             prompt,
             seed=seed,
-            self_speculative=False,
             max_new_tokens=args.max_new_tokens,
-            num_assistant_tokens=args.num_assistant_tokens,
         )
-        base["index"] = index
-        base["seed"] = seed
-        base["expected"] = expected
-        base["predicted"] = predicted_answer(base["text"])
+        base.update(
+            index=index,
+            seed=seed,
+            expected=expected,
+            predicted=predicted_answer(base["text"]),
+        )
         base["correct"] = base["predicted"] == expected
         baseline.append(base)
 
-        assisted_run = run_generation(
+        assisted_run = run_speculative(
             model,
             tokenizer,
+            assistant_model,
             prompt,
             seed=seed,
-            self_speculative=True,
             max_new_tokens=args.max_new_tokens,
             num_assistant_tokens=args.num_assistant_tokens,
         )
-        assisted_run["index"] = index
-        assisted_run["seed"] = seed
-        assisted_run["expected"] = expected
-        assisted_run["predicted"] = predicted_answer(assisted_run["text"])
+        assisted_run.update(
+            index=index,
+            seed=seed,
+            expected=expected,
+            predicted=predicted_answer(assisted_run["text"]),
+        )
         assisted_run["correct"] = assisted_run["predicted"] == expected
         assisted.append(assisted_run)
 
@@ -247,12 +341,19 @@ def main() -> int:
     spec_tokens = sum(x["tokens"] for x in assisted)
 
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "benchmark": "CFI-Eval-0006-SelfSpeculative",
+        "method": (
+            "Shared-weight truncated assistant speculative decoding. "
+            "Qwen3-4B-Base remains the 36-layer target; a separate assistant "
+            "object executes the first 30 shared layers and the ordinary "
+            "assistant_model verification path validates candidates."
+        ),
         "model_path": str(args.model),
         "questions": len(rows),
-        "exit_layer": 30,
-        "total_layers": len(model.model.layers),
+        "target_layers": total_layers,
+        "assistant_layers": len(assistant_model.model.layers),
+        "weights_shared": shared_param_check,
         "assistant_tokens": args.num_assistant_tokens,
         "sampling": {
             "do_sample": True,
@@ -263,29 +364,23 @@ def main() -> int:
         },
         "baseline": {
             "correct": sum(int(x["correct"]) for x in baseline),
-            "accuracy": (
-                sum(int(x["correct"]) for x in baseline) / len(baseline)
-            ),
+            "accuracy": sum(int(x["correct"]) for x in baseline) / len(baseline),
             "total_time_seconds": base_time,
             "avg_time_per_question": base_time / len(baseline),
             "total_tokens": base_tokens,
             "overall_tok_s": base_tokens / base_time if base_time else 0.0,
             "runs": baseline,
         },
-        "self_speculative": {
+        "assisted": {
             "correct": sum(int(x["correct"]) for x in assisted),
-            "accuracy": (
-                sum(int(x["correct"]) for x in assisted) / len(assisted)
-            ),
+            "accuracy": sum(int(x["correct"]) for x in assisted) / len(assisted),
             "total_time_seconds": spec_time,
             "avg_time_per_question": spec_time / len(assisted),
             "total_tokens": spec_tokens,
             "overall_tok_s": spec_tokens / spec_time if spec_time else 0.0,
             "runs": assisted,
         },
-        "speedup": (
-            base_time / spec_time if spec_time > 0 else 0.0
-        ),
+        "speedup": base_time / spec_time if spec_time else 0.0,
     }
 
     path = args.output / "self_speculative_results.json"
@@ -301,10 +396,10 @@ def main() -> int:
         f"tok/s={result['baseline']['overall_tok_s']:.2f}"
     )
     print(
-        f"Self-spec: {result['self_speculative']['correct']}/{len(assisted)} "
-        f"accuracy={result['self_speculative']['accuracy']:.1%} "
+        f"Speculative: {result['assisted']['correct']}/{len(assisted)} "
+        f"accuracy={result['assisted']['accuracy']:.1%} "
         f"time={spec_time:.2f}s "
-        f"tok/s={result['self_speculative']['overall_tok_s']:.2f}"
+        f"tok/s={result['assisted']['overall_tok_s']:.2f}"
     )
     print(f"Speedup: {result['speedup']:.3f}x")
     print(f"Results: {path}")

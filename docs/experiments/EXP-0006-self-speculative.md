@@ -1,67 +1,39 @@
-# EXP-0006: Self-Speculative Decoding at Layer 30
+# EXP-0006: Shared-Weight Truncated-Assistant Speculative Decoding
 
-## Research question
+## Correction to the initial implementation
 
-Can the useful predictive information already present at layer 30 be exploited
-as a cheap draft path while the remaining layers verify and correct the draft?
+The first EXP-0006 implementation attempted to use Transformers' assistant_early_exit on Qwen3-4B-Base.
 
-## Motivation
+Transformers documents assistant_early_exit for checkpoints trained so that intermediate-layer logits are interpretable as early-exit predictions. Qwen3-4B-Base is not an early-exit-trained checkpoint. The resulting run failed inside the speculative cache path before producing an assisted result.
 
-EXP-0004 showed strong teacher-forced predictive signal at layer 30.
-EXP-0005 showed that layer 30 agrees with the actual sampled token 64.78% of the
-time during free-running generation.
+That failure is classified as an implementation/model-support failure, not a scientific result.
 
-EXP-0002 and EXP-0003 showed that using layer 30 as a standalone generator
-fails. Self-speculative decoding tests a different computational organization:
-layer 30 proposes several tokens, then layers 31-36 verify the block.
+## Corrected method
 
-## Method
+The corrected experiment uses the ordinary assistant_model speculative-decoding interface.
 
-Use the native Transformers self-speculative decoding path with:
+A second assistant model object is constructed by shallow-copying the loaded target and replacing its layer list with the first 30 layers. The underlying weights/modules are shared with the 36-layer target, so the experiment does not load a second copy of the 4B parameters.
 
-- Qwen3-4B-Base
-- intermediate assistant/exit layer: 30
-- same tokenizer
-- 4-bit NF4 + double quant
-- BF16 compute
-- same fixed CFI GSM8K evaluation set
-- same sampling parameters
-- initial speculative block: 4 tokens
-- constant speculative block size for the first gate
-
-The target model remains the original 36-layer model. No weights are trained.
-
-## Baseline
-
-For the same questions and seeds, measure ordinary 36-layer generation.
-
-## Metrics
-
-- GSM8K accuracy
-- total generation time
-- average seconds/question
-- generated tokens
-- overall tokens/second
-
-The primary systems result is wall-clock speed while preserving the target
-model's output behavior.
+The 30-layer assistant drafts candidate tokens. The full 36-layer target verifies the candidate block in one forward pass.
 
 ## Gate
 
-Run 5 questions first.
+Run five fixed CFI GSM8K questions with the existing sampling protocol.
 
-If self-speculative decoding produces correct outputs and a measurable wall-time
-improvement, run the full 100-question CFI benchmark.
+Record:
+- GSM8K correctness
+- wall-clock generation time
+- generated tokens
+- tokens/second
+- peak VRAM
+- whether target and assistant weights are shared
 
-If it is correct but not faster, investigate dynamic speculation length and
-implementation overhead before treating the approach as unsuccessful.
+Run the 100-question evaluation only after the five-question gate succeeds.
 
-If it changes output quality unexpectedly, inspect the generation configuration
-and model support before interpreting it as a scientific result.
+## Interpretation
 
-## Scientific significance
+A speedup with equivalent target quality would demonstrate that computation can be reorganized into shallow drafting plus selective full-depth verification.
 
-This is the first CFI experiment that directly tests a computational
-organization in which shallow computation is used for most token proposals and
-deep computation is reserved for verification. This is closer to conditional
-computation than simply truncating or adapting the model.
+No speedup would indicate that the 30-layer draft cost and verification overhead do not amortize on the RTX 3070 for this model.
+
+A quality discrepancy should trigger validation of the speculative sampler and generation settings before being interpreted scientifically.
