@@ -104,6 +104,51 @@ def full_recompute_greedy(model, prompt_ids: torch.Tensor, count: int) -> list[i
     return out
 
 
+def validate_cached_block(
+    model,
+    prompt_ids: torch.Tensor,
+    block_tokens: torch.Tensor,
+) -> bool:
+    """Verify multi-token cached target logits against full recomputation."""
+    cache = DynamicCache(config=model.config)
+    with torch.inference_mode():
+        prefill = model(
+            input_ids=prompt_ids,
+            past_key_values=cache,
+            use_cache=True,
+        )
+        block_output = model(
+            input_ids=block_tokens,
+            past_key_values=prefill.past_key_values,
+            use_cache=True,
+        )
+
+        full_ids = torch.cat([prompt_ids, block_tokens], dim=1)
+        full_output = model(input_ids=full_ids, use_cache=False)
+
+    prompt_len = prompt_ids.shape[-1]
+    block_len = block_tokens.shape[-1]
+    cached_logits = block_output.logits[:, :, :]
+    full_logits = full_output.logits[:, prompt_len : prompt_len + block_len, :]
+
+    max_abs = (cached_logits.float() - full_logits.float()).abs().max().item()
+    cached_tokens = cached_logits.argmax(dim=-1)[0].tolist()
+    full_tokens = full_logits.argmax(dim=-1)[0].tolist()
+
+    print("BLOCK CACHE MAX ABS LOGIT DIFF:", f"{max_abs:.6g}")
+    print("BLOCK CACHE ARGMAX MATCH:", cached_tokens == full_tokens)
+    if cached_tokens != full_tokens:
+        first = next(
+            (i for i, (a, b) in enumerate(zip(cached_tokens, full_tokens)) if a != b),
+            None,
+        )
+        print("BLOCK CACHE FIRST MISMATCH:", first)
+        print("Cached token:", cached_tokens[first] if first is not None else None)
+        print("Full token:", full_tokens[first] if first is not None else None)
+        return False
+    return True
+
+
 def cached_target_greedy(model, prompt_ids: torch.Tensor, count: int) -> list[int]:
     cache = DynamicCache(config=model.config)
     with torch.inference_mode():
@@ -266,6 +311,16 @@ def main() -> int:
 
     oracle = full_recompute_greedy(model, prompt_ids, args.tokens)
     cached = cached_target_greedy(model, prompt_ids, args.tokens)
+
+    block_tokens = torch.tensor(
+        [oracle[: min(args.draft_tokens, args.tokens)]],
+        device=prompt_ids.device,
+        dtype=torch.long,
+    )
+    if not validate_cached_block(model, prompt_ids, block_tokens):
+        print("TARGET BLOCK CACHE CHECK: FAIL")
+        return 4
+    print("TARGET BLOCK CACHE CHECK: PASS")
 
     if oracle == cached:
         print("TARGET CACHE CHECK: PASS")
