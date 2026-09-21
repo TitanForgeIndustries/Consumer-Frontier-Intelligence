@@ -306,18 +306,28 @@ def build_model(model_path: Path):
 
 
 def make_shared_weight_assistant(target_model, depth: int):
-    """Create a truncated assistant without duplicating loaded weights."""
+    """Create an isolated truncated model container that shares loaded modules."""
     total_layers = len(target_model.model.layers)
     if depth <= 0 or depth >= total_layers:
         raise ValueError(
             f"Assistant depth must be between 1 and {total_layers - 1}."
         )
 
+    # copy.copy() alone is unsafe for nn.Module because the internal _modules
+    # dictionary is shared. Mutating assistant.model.layers would therefore
+    # mutate target_model.model.layers too. Copy only the lightweight module
+    # containers while deliberately reusing the underlying parameter modules.
     assistant = copy.copy(target_model)
-    assistant.model = copy.copy(target_model.model)
+    assistant.__dict__ = target_model.__dict__.copy()
+    assistant._modules = target_model._modules.copy()
+
+    assistant_model = copy.copy(target_model.model)
+    assistant_model.__dict__ = target_model.model.__dict__.copy()
+    assistant_model._modules = target_model.model._modules.copy()
+
+    assistant.model = assistant_model
     assistant.config = copy.deepcopy(target_model.config)
     assistant.model.config = assistant.config
-    assistant.config.num_hidden_layers = depth
 
     assistant.model.layers = nn.ModuleList(
         list(target_model.model.layers[:depth])
@@ -325,7 +335,11 @@ def make_shared_weight_assistant(target_model, depth: int):
     assistant.model.embed_tokens = target_model.model.embed_tokens
     assistant.model.norm = target_model.model.norm
     assistant.lm_head = target_model.lm_head
+
     assistant.eval()
+
+    if len(target_model.model.layers) != total_layers:
+        raise RuntimeError("Shared assistant construction mutated target layer count.")
 
     return assistant
 

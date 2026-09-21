@@ -59,11 +59,20 @@ def load_model(model_path: Path):
 
 def make_assistant(target_model, depth: int):
     assistant = copy.copy(target_model)
-    assistant.model = copy.copy(target_model.model)
+    assistant.__dict__ = target_model.__dict__.copy()
+    assistant._modules = target_model._modules.copy()
+
+    assistant_model = copy.copy(target_model.model)
+    assistant_model.__dict__ = target_model.model.__dict__.copy()
+    assistant_model._modules = target_model.model._modules.copy()
+
+    assistant.model = assistant_model
     assistant.config = copy.deepcopy(target_model.config)
     assistant.model.config = assistant.config
     assistant.config.num_hidden_layers = depth
-    assistant.model.layers = nn.ModuleList(list(target_model.model.layers[:depth]))
+    assistant.model.layers = nn.ModuleList(
+        list(target_model.model.layers[:depth])
+    )
     assistant.model.embed_tokens = target_model.model.embed_tokens
     assistant.model.norm = target_model.model.norm
     assistant.lm_head = target_model.lm_head
