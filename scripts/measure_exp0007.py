@@ -674,7 +674,7 @@ def run_question(
     torch.cuda.synchronize()
     elapsed = time.perf_counter() - start
 
-    new_tokens = generated.sequences[0, prompt_length:]
+    new_tokens = generated[0, prompt_length:]
     output_text = tokenizer.decode(
         new_tokens,
         skip_special_tokens=True,
