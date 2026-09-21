@@ -671,6 +671,8 @@ def run_reference(
             top_p=0.95,
             top_k=20,
             pad_token_id=tokenizer.eos_token_id,
+            stop_strings=["\nQuestion:", "\nProblem:"],
+            tokenizer=tokenizer,
         )
 
     torch.cuda.synchronize()
@@ -860,9 +862,10 @@ def main() -> int:
 
             print(
                 f"[{index}/{len(rows)}] "
-                f"base={reference['correct']} "
+                f"expected={expected} "
+                f"base={reference['predicted']}:{reference['correct']} "
                 f"base_time={reference['elapsed_seconds']:.2f}s "
-                f"spec={assisted['correct']} "
+                f"spec={assisted['predicted']}:{assisted['correct']} "
                 f"spec_time={assisted['elapsed_seconds']:.2f}s "
                 f"accept={assisted['acceptance_rate']:.1%} "
                 f"draft={assisted['proposed_draft_tokens']} "
