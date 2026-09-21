@@ -312,6 +312,7 @@ class Recorder:
         self.is_decode = False
         self.previous_hidden: dict[int, torch.Tensor] = {}
         self.current = StepState()
+        self.in_probe = False
         self.token_records: list[dict[str, Any]] = []
         self.layer_records: list[dict[str, Any]] = []
         self.sublayer_records: list[dict[str, Any]] = []
@@ -402,7 +403,11 @@ class Recorder:
         projected = self.model.model.norm(
             native_hidden.to(device).unsqueeze(0).unsqueeze(0)
         )
-        logits = self.model.lm_head(projected).float()[0, -1]
+        self.in_probe = True
+        try:
+            logits = self.model.lm_head(projected).float()[0, -1]
+        finally:
+            self.in_probe = False
         top_values, top_indices = torch.topk(logits, k=2)
 
         top1_id = int(top_indices[0].item())
@@ -437,7 +442,7 @@ class Recorder:
         )
 
     def lm_head_hook(self, _module, _inputs, output) -> None:
-        if not self.is_decode:
+        if not self.is_decode or self.in_probe:
             return
 
         logits = _first_tensor(output).float()[0, -1]
