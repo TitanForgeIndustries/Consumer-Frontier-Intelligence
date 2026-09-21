@@ -127,6 +127,62 @@ def load_rows(path: Path, count: int) -> list[dict[str, Any]]:
     return rows
 
 
+CHINESE_DIGITS = {
+    "零": 0,
+    "〇": 0,
+    "一": 1,
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+}
+CHINESE_UNITS = {
+    "十": 10,
+    "百": 100,
+    "千": 1000,
+    "万": 10_000,
+    "亿": 100_000_000,
+}
+
+
+def parse_chinese_integer(text: str) -> int | None:
+    text = text.strip()
+    if not text or any(ch not in CHINESE_DIGITS and ch not in CHINESE_UNITS for ch in text):
+        return None
+
+    total = 0
+    section = 0
+    digit = 0
+    saw_unit = False
+
+    for ch in text:
+        if ch in CHINESE_DIGITS:
+            digit = CHINESE_DIGITS[ch]
+            continue
+
+        saw_unit = True
+        unit = CHINESE_UNITS[ch]
+
+        if unit < 10_000:
+            if digit == 0 and ch == "十":
+                digit = 1
+            section += digit * unit
+            digit = 0
+        elif unit in (10_000, 100_000_000):
+            section += digit
+            total += section * unit
+            section = 0
+            digit = 0
+
+    value = total + section + digit
+    return value if saw_unit or len(text) == 1 else None
+
+
 def canonical_number(value: str | None) -> str | None:
     if value is None:
         return None
@@ -159,6 +215,16 @@ def extract_predicted(text: str) -> str | None:
     )
     if explicit:
         return canonical_number(explicit[-1])
+
+    explicit_chinese = re.findall(
+        r"(?:The answer is|####)\s*:?\s*<?\s*([零〇一二两三四五六七八九十百千万亿]+)\s*>?",
+        text,
+        re.IGNORECASE,
+    )
+    if explicit_chinese:
+        value = parse_chinese_integer(explicit_chinese[-1])
+        if value is not None:
+            return str(value)
 
     for line in reversed([x.strip() for x in text.splitlines() if x.strip()]):
         match = re.fullmatch(r"[-+]?\$?\s*\d[\d,]*(?:\.\d+)?", line)
@@ -686,8 +752,6 @@ def run_reference(
     return {
         "text": text,
         "tokens": generated_tokens,
-        "predicted_debug": predicted,
-        "text_tail": text[-500:],
         "elapsed_seconds": elapsed,
         "tokens_per_second": (
             generated_tokens / elapsed if elapsed > 0 else 0.0
@@ -867,7 +931,6 @@ def main() -> int:
                 f"[{index}/{len(rows)}] "
                 f"expected={expected} "
                 f"base={reference['predicted']}:{reference['correct']} "
-                f"base_tail={reference['text_tail']!r} "
                 f"base_time={reference['elapsed_seconds']:.2f}s "
                 f"spec={assisted['predicted']}:{assisted['correct']} "
                 f"spec_time={assisted['elapsed_seconds']:.2f}s "
