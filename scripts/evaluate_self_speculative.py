@@ -682,9 +682,12 @@ def run_reference(
     text = tokenizer.decode(generated, skip_special_tokens=True).strip()
     generated_tokens = int(generated.shape[-1])
 
+    predicted = extract_predicted(text)
     return {
         "text": text,
         "tokens": generated_tokens,
+        "predicted_debug": predicted,
+        "text_tail": text[-500:],
         "elapsed_seconds": elapsed,
         "tokens_per_second": (
             generated_tokens / elapsed if elapsed > 0 else 0.0
@@ -864,6 +867,7 @@ def main() -> int:
                 f"[{index}/{len(rows)}] "
                 f"expected={expected} "
                 f"base={reference['predicted']}:{reference['correct']} "
+                f"base_tail={reference['text_tail']!r} "
                 f"base_time={reference['elapsed_seconds']:.2f}s "
                 f"spec={assisted['predicted']}:{assisted['correct']} "
                 f"spec_time={assisted['elapsed_seconds']:.2f}s "
