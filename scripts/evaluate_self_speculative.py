@@ -705,7 +705,10 @@ def speculative_decode(
             # target cache. It is consumed with the next verification block.
             continue
 
-        if generated and generated[-1] == tokenizer.eos_token_id:
+        if generated and (
+            generated[-1] == tokenizer.eos_token_id
+            or has_stop_suffix(generated, stop_token_sequences)
+        ):
             break
 
         # All proposed tokens were accepted. The target's final verification
