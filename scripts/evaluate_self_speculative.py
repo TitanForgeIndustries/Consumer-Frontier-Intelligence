@@ -144,6 +144,10 @@ def make_shared_weight_assistant(target_model, depth: int):
     assistant.generation_config = copy.deepcopy(target_model.generation_config)
     assistant.generation_config.assistant_early_exit = None
     assistant.generation_config.num_assistant_tokens = 4
+    # Qwen3 speculative rollback can encounter uninitialized DynamicCache
+    # entries. StaticCache allocates every layer up front, making candidate
+    # rollback deterministic for this feasibility experiment.
+    assistant.generation_config.cache_implementation = "static"
     assistant.eval()
 
     return assistant
@@ -178,6 +182,7 @@ def run_baseline(
             top_k=20,
             pad_token_id=tokenizer.eos_token_id,
             use_cache=True,
+            cache_implementation="static",
         )
     torch.cuda.synchronize()
 
@@ -230,6 +235,7 @@ def run_speculative(
             top_k=20,
             pad_token_id=tokenizer.eos_token_id,
             use_cache=True,
+            cache_implementation="static",
         )
     torch.cuda.synchronize()
 
