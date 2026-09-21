@@ -123,121 +123,105 @@ def speculative_greedy(
     count: int,
     draft_k: int,
 ):
-    target_cache = DynamicCache(config=target_model.config)
+    """Greedy speculative decoding validated against a full-recompute target."""
     assistant_cache = DynamicCache(config=assistant_model.config)
 
     with torch.inference_mode():
-        target_prefill = target_model(
-            input_ids=prompt_ids,
-            past_key_values=target_cache,
-            use_cache=True,
-        )
         assistant_prefill = assistant_model(
             input_ids=prompt_ids,
             past_key_values=assistant_cache,
             use_cache=True,
         )
 
-    target_cache = target_prefill.past_key_values
     assistant_cache = assistant_prefill.past_key_values
-    target_next = target_prefill.logits[:, -1, :]
     assistant_next = assistant_prefill.logits[:, -1, :]
-
     generated: list[int] = []
     rounds = 0
+    prompt_len = int(prompt_ids.shape[-1])
 
     while len(generated) < count:
         rounds += 1
         draft: list[int] = []
+
         for _ in range(min(draft_k, count - len(generated))):
             token = int(assistant_next.argmax(dim=-1).item())
             draft.append(token)
-            t = torch.tensor([[token]], device=prompt_ids.device, dtype=torch.long)
+            token_tensor = torch.tensor(
+                [[token]],
+                device=prompt_ids.device,
+                dtype=torch.long,
+            )
             with torch.inference_mode():
-                step = assistant_model(input_ids=t, past_key_values=assistant_cache, use_cache=True)
+                step = assistant_model(
+                    input_ids=token_tensor,
+                    past_key_values=assistant_cache,
+                    use_cache=True,
+                )
             assistant_cache = step.past_key_values
             assistant_next = step.logits[:, -1, :]
 
-        d = torch.tensor([draft], device=prompt_ids.device, dtype=torch.long)
-        with torch.inference_mode():
-            verified = target_model(
-                input_ids=d,
-                past_key_values=target_cache,
-                use_cache=True,
-            )
-
-        target_logits = torch.cat(
-            [target_next.unsqueeze(1), verified.logits[:, :-1, :]],
-            dim=1,
-        )
-
-        target_tokens = target_logits.argmax(dim=-1)[0].tolist()
-        mismatch = None
-        for i, token in enumerate(draft):
-            if token != target_tokens[i]:
-                mismatch = i
-                break
-
-        matches = len(draft) if mismatch is None else mismatch
-
-        generated.extend(draft[:matches])
-
-        if len(generated) >= count:
-            return generated[:count], rounds
-
-        correction = int(target_tokens[matches])
-        generated.append(correction)
-
-        rollback = len(draft) - matches
-        if rollback:
-            safe_crop(target_cache, rollback)
-            safe_crop(assistant_cache, rollback)
-
-        correction_tensor = torch.tensor(
-            [[correction]],
-            device=prompt_ids.device,
-            dtype=torch.long,
-        )
-        with torch.inference_mode():
-            a = assistant_model(
-                input_ids=correction_tensor,
-                past_key_values=assistant_cache,
-                use_cache=True,
-            )
-        assistant_cache = a.past_key_values
-        assistant_next = a.logits[:, -1, :]
-        target_cache = verified.past_key_values
-
-        if rollback:
-            safe_crop(target_cache, 0)
-
-        # Recompute target's next-token state from the accepted context so the
-        # next speculative round has an unambiguous prefix.
-        accepted_ids = torch.tensor(
+        context_len = prompt_len + len(generated)
+        context_ids = torch.tensor(
             [generated],
             device=prompt_ids.device,
             dtype=torch.long,
         )
+        draft_ids = torch.tensor(
+            [draft],
+            device=prompt_ids.device,
+            dtype=torch.long,
+        )
+        full_ids = torch.cat([prompt_ids, context_ids, draft_ids], dim=1)
 
         with torch.inference_mode():
-            target_rebuild = target_model(
-                input_ids=torch.cat([prompt_ids, accepted_ids], dim=1),
+            target_output = target_model(
+                input_ids=full_ids,
                 use_cache=False,
             )
-        target_next = target_rebuild.logits[:, -1, :]
 
-        # Rebuild target cache to the exact accepted prefix. This is diagnostic
-        # code, not the performance path.
-        target_cache = DynamicCache(config=target_model.config)
+        # Logits at position context_len - 1 predict draft[0], and the next
+        # len(draft) positions provide the target predictions for the full
+        # candidate block plus its bonus token.
+        target_logits = target_output.logits[
+            :,
+            context_len - 1 : context_len + len(draft),
+            :,
+        ]
+        target_tokens = target_logits.argmax(dim=-1)[0].tolist()
+
+        matches = 0
+        while matches < len(draft) and draft[matches] == target_tokens[matches]:
+            matches += 1
+
+        generated.extend(draft[:matches])
+
+        if len(generated) >= count:
+            break
+
+        committed = target_tokens[matches]
+        generated.append(committed)
+
+        rollback = len(draft) - matches
+        if rollback:
+            safe_crop(assistant_cache, rollback)
+
+        committed_tensor = torch.tensor(
+            [[committed]],
+            device=prompt_ids.device,
+            dtype=torch.long,
+        )
         with torch.inference_mode():
-            rebuilt = target_model(
-                input_ids=torch.cat([prompt_ids, accepted_ids], dim=1),
-                past_key_values=target_cache,
+            corrected = assistant_model(
+                input_ids=committed_tensor,
+                past_key_values=assistant_cache,
                 use_cache=True,
             )
-        target_cache = rebuilt.past_key_values
+
+        assistant_cache = corrected.past_key_values
+        assistant_next = corrected.logits[:, -1, :]
 
     return generated[:count], rounds
+
 
 
 def main() -> int:
