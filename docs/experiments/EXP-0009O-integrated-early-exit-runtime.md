@@ -144,6 +144,57 @@ git pull origin exp-0009o-integrated-early-exit-runtime
 python scripts/run_exp0009o.py --questions 10 --train-questions 7 --max-new-tokens 128 --epochs 16 --bottleneck 128 --repeats 2 --warmup-tokens 16 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009O-Integrated-Early-Exit-Runtime"
 ```
 
+
+## Observed Runtime Run
+
+The first integrated runtime run completed successfully on the RTX 3070.
+
+The L36 API probe returned a tensor with shape `[1, 58, 2560]`, confirming that the installed Qwen3 decoder-layer ABI matched the experiment's direct forward bypass.
+
+No L36 execution was performed in the two early-exit modes. The L36 `forward()` method was replaced during generation and restored afterward.
+
+Held-out runtime results, averaged across questions 8-10 with two measured repeats per mode:
+
+| Metric | Full 36-layer | Raw H35 | Adapted H35 |
+|---|---:|---:|---:|
+| Mean generation time | 12.1035 s | 11.8162 s | **11.4088 s** |
+| Mean tokens/s | 10.58 approx. | 10.70 approx. | **11.23 approx.** |
+| Mean speedup vs full | 1.000x | **1.0255x** | **1.0616x** |
+| Free-running token agreement vs full | 100% | 8.59% | **20.31%** |
+
+Per-question speedups:
+
+| Question | Raw H35 | Adapted |
+|---|---:|---:|
+| 8 | 1.009x | **1.055x** |
+| 9 | 0.988x | **1.026x** |
+| 10 | **1.079x** | **1.103x** |
+
+The adapted early-exit path was faster than the full model on all three held-out questions and averaged approximately 6.16% higher throughput.
+
+The raw H35 path averaged approximately 2.55% speedup, showing that physically removing L36 does produce a small runtime benefit in this implementation.
+
+Behavioral preservation remains the limiting factor. The adapted path improved free-running token agreement over raw H35 (20.31% versus 8.59%) but still diverged substantially from the full model. Question-level adapted agreement was approximately 31.2% for Q8, 6.2% for Q9, and 23.4% for Q10.
+
+The run therefore supports two separate observations:
+
+1. **The computational saving is real but currently modest.** L36 can be physically omitted and generation can become faster on this hardware/runtime.
+2. **The learned transition recovers some of the lost behavior, but not nearly enough for interchangeable generation.** The 32.4% held-out KL reduction from EXP-0009N does not translate into high free-running sequence agreement.
+
+The result should not be described as a validated end-to-end quality-preserving speedup. The current evidence is a prototype runtime proof-of-mechanism with substantial behavioral divergence and only three held-out questions.
+
+The benchmark also emitted the normal Triton warning that flop counting is unavailable. This does not invalidate the wall-clock measurement because generation timing uses explicit CUDA synchronization.
+
+## O Decision
+
+**Result: computational proof-of-mechanism, behavioral failure for direct replacement.**
+
+Do not increase adapter size blindly yet.
+
+The next research step should focus on why a transition that improves teacher-forced token-distribution similarity still diverges quickly under autoregressive generation. In particular, the transition is being applied independently at every generated step from H35, while the full model's L36 contribution may alter the hidden state trajectory in a way that compounds after the first divergent token.
+
+The next experiment should therefore investigate a runtime-compatible replacement that is trained/evaluated against **free-running trajectories**, or a conditional mechanism that verifies and corrects early-exit tokens, rather than simply making the current residual transition larger.
+
 ## Status
 
-Implementation committed. Runtime measurements pending.
+Runtime benchmark completed. First integrated early-exit run recorded above.
