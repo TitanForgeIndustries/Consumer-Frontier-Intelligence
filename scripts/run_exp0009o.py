@@ -382,11 +382,15 @@ def main() -> int:
     )
 
     adapter_path = args.output / "transition_state_dict_fp32.pt"
+    state_dict_cpu = {
+        name: value.detach().cpu()
+        for name, value in transition_fp32.state_dict().items()
+    }
     torch.save(
         {
             "experiment": "EXP-0009O",
             "source_experiment": "EXP-0009N",
-            "state_dict": transition_fp32.state_dict(),
+            "state_dict": state_dict_cpu,
             "parameter_count": sum(
                 p.numel() for p in transition_fp32.parameters()
             ),
