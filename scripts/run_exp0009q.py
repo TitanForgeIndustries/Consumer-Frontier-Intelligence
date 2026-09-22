@@ -389,9 +389,13 @@ class MLPReplacement:
             **kwargs: Any,
         ) -> torch.Tensor:
             del args, kwargs
-            runtime_dtype = next(
-                self.replacement.parameters()
-            ).dtype
+            try:
+                runtime_dtype = next(
+                    self.replacement.parameters()
+                ).dtype
+            except StopIteration:
+                runtime_dtype = hidden.dtype
+
             output = self.replacement(
                 hidden.to(dtype=runtime_dtype)
             )
