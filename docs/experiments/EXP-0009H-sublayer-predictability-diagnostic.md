@@ -124,3 +124,20 @@ The next diagnostic commit adds a direct comparison between the stored attention
 - an injector/replay boundary problem
 
 No scientific conclusion about attention predictability should be drawn until that diagnostic passes.
+
+
+## Control correction after stored-capture diagnostic
+
+The stored attention capture differed materially from a fresh attention capture despite perfect logits repeatability:
+
+- stored-vs-fresh attention max absolute difference: 195.5
+- mean absolute difference: 1.736855
+- mean L2 difference: 126.135010
+
+This shows that the internal attention decomposition is not stable enough to use cross-forward exact replay as the semantic control.
+
+The exact-component control has therefore been changed to **same-forward replay**. During one untouched forward, the selected component values are captured and written back to the same selected positions before the module returns. This isolates hook replacement semantics from cross-forward decomposition drift.
+
+The cross-forward stored-vs-fresh measurement remains recorded as a diagnostic rather than being treated as a scientific result.
+
+The updated control commit is `35c5e2f908d935413ef1f767eb8a5b7de3acbf99`.
