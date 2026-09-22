@@ -2,20 +2,44 @@
 
 ## Purpose
 
-Validate the corrected EXP-0009L finding on a larger held-out split and compare the learned exit with a functional whole-L36 skip on the same traces.
+Validate the corrected EXP-0009L anchored early-exit result on a larger split and compare the learned exit against a functional whole-L36 skip under the same evaluation conditions.
 
-Planned comparison:
+Comparison:
 
 1. full model oracle
-2. raw H35 exit through the existing final RMSNorm + LM head
-3. learned anchored H35 transition through the same existing final stack
+2. raw H35 direct exit through the existing final RMSNorm + LM head
+3. learned bounded residual H35 exit
 4. functional whole-L36 skip
 
-## Status
+## Architecture
 
-The branch contains a validation scaffold only. The training path is intentionally blocked until a differentiable frozen output-stack path is implemented correctly.
+The learned transition is the validated EXP-0009L adapter:
 
-This prevents accidentally reporting a "trained" adapter whose gradient does not reach its parameters.
+\`LayerNorm -> Linear(hidden, 128) -> GELU -> Linear(128, hidden)\`
+
+followed by a bounded residual added to H35.
+
+The existing final RMSNorm and pretrained LM head remain frozen.
+
+The base model is frozen and the transition is trained directly through the differentiable final output stack, using the full teacher token distribution.
+
+## Validation goals
+
+The key question is whether the improvement seen in EXP-0009L generalizes beyond two held-out questions.
+
+All three reduced-compute candidates are evaluated on the same held-out traces:
+
+- raw H35 exit
+- learned adapted exit
+- functional L36 skip
+
+Metrics:
+
+- KL divergence to full-model teacher
+- top-1 agreement
+- target-token probability ratio
+- target log-probability delta
+- logit L2 distance
 
 ## Planned setup
 
@@ -39,4 +63,18 @@ This prevents accidentally reporting a "trained" adapter whose gradient does not
 - learning rate 1e-3
 - weight decay 1e-5
 
-This experiment must not be run until the training implementation passes a gradient-flow unit check.
+Run:
+
+    python scripts/run_exp0009n.py --questions 10 --train-questions 7 --max-new-tokens 128 --epochs 16 --bottleneck 128 --max-train-positions 64 --output "E:\\Titan Forge Industries\\CFI-Data\\Results\\CFI-Eval-0009N-Early-Exit-Generalization"
+
+## Interpretation
+
+A result is interesting only if the learned exit improves on the raw H35 exit on held-out traces and can be compared directly against the whole-L36 skip baseline.
+
+This experiment is still behavioral. The functional skip executes L36 before replacing its output, and the exit head is currently evaluated from captured H35 states. Neither establishes runtime speed.
+
+## Decision rule
+
+- clear held-out improvement over raw H35 exit and competitive behavior with L36 skip -> pursue integrated early exit and runtime measurement
+- improvement over raw H35 exit but substantially worse than L36 skip -> investigate richer/conditional transitions
+- no held-out improvement -> stop increasing capacity blindly and investigate richer source information or adaptive routing
