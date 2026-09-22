@@ -121,45 +121,23 @@ def capture_layer_states(
     model: Any,
     full_ids: torch.Tensor,
 ) -> tuple[dict[int, torch.Tensor], torch.Tensor]:
-    captured: dict[int, list[torch.Tensor]] = {30: [], 35: [], 36: []}
-    handles = []
+    layer36_capture: list[torch.Tensor] = []
 
-    for layer in (30, 35):
-        def make_hook(target_layer: int):
-            def hook(_module: Any, _inputs: Any, output: Any) -> None:
-                if torch.is_tensor(output):
-                    tensor = output
-                elif isinstance(output, (tuple, list)) and output:
-                    tensor = output[0]
-                else:
-                    raise TypeError(
-                        f"Unexpected layer-{target_layer} output: "
-                        f"{type(output).__name__}"
-                    )
-                captured[target_layer].append(
-                    tensor.detach().float().cpu()
-                )
-            return hook
-
-        handles.append(
-            model.model.layers[layer - 1].register_forward_hook(
-                make_hook(layer)
-            )
-        )
-
-    def hook36(_module: Any, _inputs: Any, output: Any) -> None:
-        if torch.is_tensor(output):
-            tensor = output
-        elif isinstance(output, (tuple, list)) and output:
-            tensor = output[0]
+    def capture_layer36(_module: Any, _inputs: Any, layer_output: Any) -> None:
+        if torch.is_tensor(layer_output):
+            tensor = layer_output
+        elif isinstance(layer_output, (tuple, list)) and layer_output:
+            tensor = layer_output[0]
         else:
             raise TypeError(
-                f"Unexpected layer-36 output: {type(output).__name__}"
+                "Unexpected layer-36 output: "
+                f"{type(layer_output).__name__}"
             )
-        captured[36].append(tensor.detach().float().cpu())
+        layer36_capture.append(tensor.detach().float().cpu())
 
-    handles.append(model.model.layers[35].register_forward_hook(hook36))
-
+    # Qwen3 layer 36 is captured explicitly from the decoder block so that
+    # the replacement boundary remains exactly the pre-final-RMSNorm state.
+    handle = model.model.layers[35].register_forward_hook(capture_layer36)
     try:
         with torch.inference_mode():
             outputs = model(
@@ -169,20 +147,30 @@ def capture_layer_states(
                 output_hidden_states=True,
             )
     finally:
-        for handle in handles:
-            handle.remove()
+        handle.remove()
 
     hidden_states = outputs.hidden_states
     if hidden_states is None or len(hidden_states) <= 35:
-        raise RuntimeError("Model did not expose hidden states through layer 35.")
+        raise RuntimeError(
+            "Model did not expose hidden states through layer 35."
+        )
+    if len(layer36_capture) != 1:
+        raise RuntimeError(
+            f"Expected one layer-36 capture, got {len(layer36_capture)}."
+        )
 
     states = {
         30: hidden_states[30][0].float().cpu(),
         35: hidden_states[35][0].float().cpu(),
-        36: captured[36][0][0],
+        # Direct decoder-layer output, before Qwen3 final RMSNorm.
+        36: layer36_capture[0][0],
     }
+    if set(states) != {30, 35, 36}:
+        raise RuntimeError(
+            f"Layer-state capture incomplete: expected {{30, 35, 36}}, "
+            f"got {sorted(states)}."
+        )
     return states, outputs.logits.detach()
-
 
 def collect_trace(
     model: Any,
