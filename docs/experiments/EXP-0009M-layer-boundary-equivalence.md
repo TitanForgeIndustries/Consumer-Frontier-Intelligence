@@ -45,3 +45,27 @@ Run:
 ## Limits
 
 M is a control experiment. It does not claim a speedup or a new architecture.
+
+
+## Hardened control revision: 2026-09-21
+
+The first implementation reached a CUDA device-side assert during a post-forward logit comparison. The revised implementation changes the control structure rather than merely suppressing the error:
+
+- H35 and the actual L36 input are captured during the same forward.
+- The L36 skip is applied in that same forward by replacing only the primary layer output with a clone of its input.
+- All position indexing for analysis occurs on CPU tensors.
+- Direct output-stack evaluation selects the relevant H35/L36-input rows on CPU first, then transfers only those rows to CUDA.
+- Tensor sequence lengths and requested position bounds are checked before comparison.
+- CUDA synchronization is used around the critical forward boundaries.
+
+This keeps the research question identical while removing cross-forward boundary ambiguity and the previous CUDA indexing path.
+
+## Safety rule for the next run
+
+Because a previous process experienced a CUDA device-side assert, start the test from a fresh PowerShell/Python process. Do not reuse a Python process that has already reported a CUDA device-side assert.
+
+Begin with a one-question smoke run:
+
+    python scripts/run_exp0009m.py --questions 1 --max-new-tokens 32 --output "E:\\Titan Forge Industries\\CFI-Data\\Results\\CFI-Eval-0009M-Layer-Boundary-Equivalence-Smoke"
+
+Only after the smoke run completes without an exception should the default 2-question control be run.
