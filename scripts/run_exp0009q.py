@@ -554,9 +554,13 @@ def teacher_forced_eval(
             base_hidden + base_mlp,
         )
 
+        transition_dtype = next(transition.parameters()).dtype
         predicted_mlp = transition(
-            source.to("cuda:0", dtype=torch.float32)
-        )
+            source.to(
+                device="cuda:0",
+                dtype=transition_dtype,
+            )
+        ).float()
         predicted_logits = base_exit_logits(
             model,
             base_hidden + predicted_mlp,
