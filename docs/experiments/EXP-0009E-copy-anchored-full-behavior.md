@@ -155,3 +155,93 @@ Do not respond to a negative E result by immediately increasing bottleneck size 
 First determine whether the source state contains enough information for the task under a bounded functional correction.
 
 Only after that should the project consider adding richer conditioning or a multi-stage latent predictor.
+
+
+## Smoke result: 2026-09-21
+
+One-relation smoke command:
+
+    python scripts/run_exp0009e.py --questions 4 --train-questions 2 --relations h35_to_h36 --max-new-tokens 128 --epochs 4
+
+The exact-state injection control passed on both held-out questions:
+
+- KL = 0.000000
+- top-1 = 1.000000
+
+### Held-out question 3
+
+Predictor:
+
+- state cosine: 0.5714
+- state relative error: 0.9546
+- KL: 0.1546
+- top-1: 0.9531
+- target probability ratio: 0.9943
+
+Copy:
+
+- KL: 0.1637
+- top-1: 0.9531
+
+### Held-out question 4
+
+Predictor:
+
+- state cosine: 0.6157
+- state relative error: 0.9100
+- KL: 0.1105
+- top-1: 0.9375
+- target probability ratio: 0.9802
+
+Copy:
+
+- KL: 0.1101
+- top-1: 0.9375
+
+Aggregate:
+
+- predictor KL: 0.13257148
+- copy KL: 0.1369
+- predictor top-1: 0.9453125
+- copy top-1: 0.9453125
+- predictor target probability ratio: 0.98727277
+- source update ratio: 0.00548158
+
+The behavioral predictor therefore slightly reduces aggregate KL while leaving top-1 unchanged, but it does not produce a consistent held-out improvement. One held-out question improves and one is slightly worse.
+
+The very small source update ratio is important. The learned state is staying extremely close to source-state copying. This suggests the copy anchor is successfully preventing large behavioral drift, but the experiment has not established that the predictor contains a materially useful replacement computation.
+
+## Decision
+
+EXP-0009E is not sufficient evidence for latent-state replacement.
+
+It does, however, provide a useful constraint:
+
+- full-vocabulary behavioral supervision is better behaved than the EXP-0009D top-k-only objective
+- copy anchoring prevents the destructive drift seen in larger-gap D results
+- the resulting predictor mostly learns to stay near copy
+- there is no demonstrated consistent behavioral gain over copy
+
+Do not increase predictor size or training duration yet.
+
+The next experiment should change the architecture, not merely the optimizer.
+
+## Next hypothesis
+
+A one-layer H35 -> H36 transition may be too structured for a generic MLP residual predictor. EXP-0007 showed that late-layer computation is asymmetric, with attention and MLP contributions behaving differently and layer 36 being unusually active.
+
+The next controlled architecture should therefore test a **factorized transition predictor**:
+
+H35
+  |
+  +--> attention-like low-rank branch ----+
+  |                                      |
+  +--> MLP-like low-rank branch ---------+--> gated delta --> H36 prediction
+  |
+  +--> source persistence ----------------+
+
+The branches remain lightweight and learned from H35, but the decomposition reflects the actual transform being approximated rather than treating the whole layer transition as one undifferentiated residual.
+
+Behavioral full-KL remains primary, copy anchoring remains active, and exact-state injection remains mandatory.
+
+This is a stronger architectural hypothesis than simply increasing the bottleneck.
