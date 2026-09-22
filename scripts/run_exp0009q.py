@@ -33,7 +33,6 @@ from run_exp0009n import (
     Trace,
     base_exit_logits,
     build_model,
-    capture_trace,
     distribution_metrics,
     extract_expected,
     extract_predicted,
@@ -43,6 +42,7 @@ from run_exp0009n import (
     train_transition,
 )
 from run_exp0009o import generation_kwargs, prompt_inputs
+from run_exp0009p import capture_greedy_trace
 
 
 DEFAULT_OUTPUT = Path(
@@ -493,7 +493,7 @@ def main() -> int:
     traces: list[Trace] = []
     for index, row in enumerate(rows, 1):
         print(f"\n[{index}/{len(rows)}] greedy training trace...")
-        trace = capture_trace(model, tokenizer, row, index, args)
+        trace = capture_greedy_trace(model, tokenizer, row, index, args)
         traces.append(trace)
         print(
             f"  expected={trace.expected} "
