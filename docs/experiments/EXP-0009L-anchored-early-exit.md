@@ -104,3 +104,50 @@ The initial EXP-0009L smoke result must therefore be treated as **invalid due to
 Commit containing the fix: \`748f001e601a0eba5ed000d6112ed58a4b18b60e\`.
 
 A new smoke run should be performed before interpreting L.
+
+
+## Corrected smoke/full result: 2026-09-21
+
+After fixing the evaluation position-alignment bug, the 6-question run completed successfully.
+
+Held-out results (questions 5 and 6):
+
+| Metric | Direct H35 exit | Adapted exit |
+|---|---:|---:|
+| Top-1 agreement | 0.855469 | 0.890625 |
+| Target probability ratio | 1.006465 | 1.015244 |
+| Target log-probability delta | -0.116964 | -0.081177 |
+| KL to teacher | 0.208167 | 0.171187 |
+
+The adapted transition therefore improved the held-out distribution match over the unmodified H35 exit:
+
+- KL reduction: about 17.8%
+- top-1 agreement improvement: about 3.5 percentage points
+- target probability ratio moved slightly closer to/above 1.0
+
+The learned state update ratio was about 0.09 on the held-out questions, well below the configured maximum of 0.5.
+
+The initial catastrophic L result is invalid because of the previously documented position-indexing bug.
+
+## Interpretation
+
+This is evidence that H35 contains behaviorally useful information for a cheap exit and that a compact learned transition can recover some information associated with L36.
+
+It is not yet evidence of a speedup or of full L36 replacement.
+
+The result is also based on only two held-out questions. Generalization must be tested on a larger split, with an explicit whole-L36 skip baseline evaluated on the same traces.
+
+## Decision
+
+Proceed to a larger validation experiment rather than increasing model capacity immediately.
+
+The next experiment should use more questions and evaluate:
+
+1. full oracle
+2. raw H35 exit
+3. adapted H35 exit
+4. functional whole-L36 skip
+
+on the exact same generated traces.
+
+Only after that comparison should the adapter architecture or training budget be expanded.
