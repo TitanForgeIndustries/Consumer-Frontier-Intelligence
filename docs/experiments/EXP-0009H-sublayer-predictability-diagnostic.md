@@ -80,3 +80,24 @@ It does not remove layer-36 computation.
 It does not demonstrate a hardware speedup.
 
 A positive component result does not by itself establish a usable replacement architecture.
+
+
+## Control hardening after first run
+
+The first smoke run failed the exact attention injection control at:
+
+- top-1 = 0.937500
+- KL = 0.07772846
+
+Because the failure occurred in the mandatory exact control, no learned attention-predictor result was interpreted.
+
+The implementation was hardened in commit `18c4b0e140cc30719057e2c1679b606d6b0445b7`:
+
+- H now loads the established NF4 model with eager attention for this diagnostic
+- a forward-to-forward repeatability control is run before component replay
+- the repeatability control must itself reproduce the untouched model
+- only then is exact component injection evaluated
+
+This separates CUDA attention-kernel reproducibility from a hook-boundary or component-capture error.
+
+The first H run therefore remains a control failure, not a scientific negative result.
