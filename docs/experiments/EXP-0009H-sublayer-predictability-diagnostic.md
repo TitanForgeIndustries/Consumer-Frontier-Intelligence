@@ -101,3 +101,26 @@ The implementation was hardened in commit `18c4b0e140cc30719057e2c1679b606d6b044
 This separates CUDA attention-kernel reproducibility from a hook-boundary or component-capture error.
 
 The first H run therefore remains a control failure, not a scientific negative result.
+
+
+## Second control result: 2026-09-21
+
+The hardened run produced:
+
+    repeatability_control: KL=0.00000000 top1=1.000000
+
+The untouched model is therefore reproducible across evaluation forwards.
+
+The exact attention replay still failed:
+
+    top1=0.960938
+    KL=0.08319319
+
+Because repeatability passed but exact component replay failed, H remains a control failure and no probe result is interpreted.
+
+The next diagnostic commit adds a direct comparison between the stored attention capture from trace collection and a fresh attention capture from the same untouched evaluation forward. This is required to distinguish:
+
+- a stale or semantically mismatched stored attention tensor
+- an injector/replay boundary problem
+
+No scientific conclusion about attention predictability should be drawn until that diagnostic passes.
