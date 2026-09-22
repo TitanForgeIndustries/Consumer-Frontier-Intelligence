@@ -23,12 +23,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from run_exp0008 import (
-    build_model,
     extract_expected,
     extract_predicted,
     format_prompt,
     load_rows,
 )
+
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 
 DEFAULT_MODEL = Path(
@@ -84,6 +85,29 @@ def parse_args() -> argparse.Namespace:
         help="Maximum evaluated positions per held-out question; 0 = all.",
     )
     return p.parse_args()
+
+
+def build_h_model(model_path: Path):
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is required for EXP-0009H.")
+
+    quant = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_compute_dtype=torch.bfloat16,
+    )
+
+    tokenizer = AutoTokenizer.from_pretrained(str(model_path))
+    model = AutoModelForCausalLM.from_pretrained(
+        str(model_path),
+        quantization_config=quant,
+        device_map={"": 0},
+        dtype=torch.bfloat16,
+        attn_implementation="eager",
+    )
+    model.eval()
+    return tokenizer, model
 
 
 def seed_all(seed: int) -> None:
@@ -393,6 +417,35 @@ def evaluate_probe(
             use_cache=False,
         ).logits[0, positions.to("cuda:0")].float()
 
+    # Re-run the untouched model once before component replay. This detects
+    # CUDA attention nondeterminism separately from hook-boundary errors.
+    with torch.inference_mode():
+        repeat_oracle = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            use_cache=False,
+        ).logits[0, positions.to("cuda:0")].float()
+
+    repeat_metrics = distribution_metrics(
+        oracle,
+        repeat_oracle,
+        next_ids,
+    )
+    print(
+        f"    repeatability_control: "
+        f"KL={repeat_metrics['kl_oracle_to_candidate_mean']:.8f} "
+        f"top1={repeat_metrics['top1_agreement']:.6f}"
+    )
+    if (
+        repeat_metrics["top1_agreement"] < 0.999999
+        or repeat_metrics["kl_oracle_to_candidate_mean"] > 1e-5
+    ):
+        raise RuntimeError(
+            f"Baseline forward repeatability failed for question {trace.index}: "
+            f"top1={repeat_metrics['top1_agreement']:.6f}, "
+            f"KL={repeat_metrics['kl_oracle_to_candidate_mean']:.8f}"
+        )
+
     exact_injector = ComponentInjector(module, positions, target)
     try:
         with torch.inference_mode():
@@ -454,6 +507,7 @@ def evaluate_probe(
         "component": component,
         "evaluated_pairs": len(positions_idx),
         "representation": prediction_metrics,
+        "repeatability_control": repeat_metrics,
         "exact_injection_control": exact_metrics,
         "predicted_component_behavior": learned_metrics,
         "zero_component_behavior": zero_metrics,
@@ -556,7 +610,7 @@ def main() -> int:
     print("Probe bottleneck:", args.bottleneck)
 
     print("\nLoading established 4-bit NF4 model...")
-    tokenizer, model = build_model(args.model)
+    tokenizer, model = build_h_model(args.model)
 
     if len(model.model.layers) < 36:
         raise RuntimeError("EXP-0009H requires at least 36 decoder layers.")
