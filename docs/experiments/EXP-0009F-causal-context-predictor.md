@@ -123,3 +123,80 @@ It does not demonstrate a hardware speedup.
 The smoke test is too small for generalization claims.
 
 A positive result still requires autoregressive rollout and timing before becoming a conditional-compute mechanism.
+
+
+## Smoke result: 2026-09-21
+
+Command:
+
+    python scripts/run_exp0009f.py --questions 4 --train-questions 2 --relations h35_to_h36 --max-new-tokens 128 --epochs 4 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009F-Causal-Context-Predictor"
+
+Exact-state injection passed:
+
+- KL = 0.000000
+- top-1 = 1.000000
+
+### Held-out question 3
+
+Predictor:
+
+- state cosine: 0.5712
+- state relative error: 0.9547
+- KL: 0.1606
+- top-1: 0.9531
+- target probability ratio: 0.9949
+
+Copy:
+
+- KL: 0.1637
+- top-1: 0.9531
+
+### Held-out question 4
+
+Predictor:
+
+- state cosine: 0.6155
+- state relative error: 0.9100
+- KL: 0.1062
+- top-1: 0.9375
+- target probability ratio: 0.9820
+
+Copy:
+
+- KL: 0.1101
+- top-1: 0.9375
+
+Aggregate:
+
+- predictor KL: 0.13338269
+- copy KL: 0.1369
+- predictor top-1: 0.9453125
+- copy top-1: 0.9453125
+- predictor target probability ratio: 0.98845109
+- source update ratio: 0.00403051
+
+The causal context predictor therefore remains near the copy solution. KL is slightly lower than copy on both held-out questions, but top-1 is unchanged and the correction remains very small.
+
+## Decision
+
+EXP-0009F does not demonstrate a meaningful improvement over source-state copying.
+
+The result specifically weakens the hypothesis that a short-range causal neighborhood is the missing information for H35 -> H36 prediction.
+
+Because H35 is already a contextualized representation, local convolution adds little measurable information at this gap.
+
+Do not respond by increasing the convolution kernel or width.
+
+## Next hypothesis
+
+The remaining transformer-layer transformation should be decomposed more explicitly.
+
+A useful next architecture should approximate two qualitatively different operations from the same H35 source sequence:
+
+1. a global interaction branch, approximating attention-style token-to-token mixing
+2. a token-wise nonlinear branch, approximating the MLP-style transformation
+
+The branches should be separately projected into a compact space and combined through a learned gate, while retaining the same bounded residual and full-vocabulary behavioral objective.
+
+This tests whether the failure comes from using one generic predictor to approximate a layer whose computation has multiple distinct mechanisms.
+
