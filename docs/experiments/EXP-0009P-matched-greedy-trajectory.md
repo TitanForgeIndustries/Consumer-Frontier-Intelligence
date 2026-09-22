@@ -121,10 +121,51 @@ git pull origin exp-0009p-matched-greedy-trajectory
 python scripts/run_exp0009p.py --questions 10 --train-questions 7 --max-new-tokens 128 --epochs 16 --bottleneck 128 --repeats 2 --warmup-tokens 16 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009P-Matched-Greedy-Trajectory"
 ```
 
-## Status
 
-Implementation committed. Runtime measurements pending.
+## Observed Run
 
+The corrected P run completed all ten matched-greedy trace captures, all 16 training epochs, and all three held-out runtime evaluations.
+
+Training loss decreased monotonically from 0.171319 at epoch 1 to 0.009709 at epoch 16.
+
+Held-out teacher-forced mean:
+
+| Metric | Raw H35 | Matched-greedy adapted |
+|---|---:|---:|
+| KL to full teacher | 0.16673453 | **0.13035729** |
+| Top-1 agreement | 0.921875 | **0.937500** |
+
+The adapted transition therefore reduced teacher-forced KL by approximately 21.8% relative to raw H35 and increased teacher-forced top-1 agreement by 1.56 percentage points.
+
+Held-out runtime mean:
+
+| Metric | Full 36-layer | Raw H35 | Adapted |
+|---|---:|---:|---:|
+| Generation time | 11.5450 s | 11.2194 s | **11.1912 s** |
+| Tokens/s | 11.0934 | 11.4183 | **11.4445** |
+| Speedup | 1.000x | **1.0293x** | **1.0318x** |
+| Free-running token agreement vs full | 100% | 8.59% | **7.29%** |
+
+Per-question adapted runtime speedups were 1.008x, 1.055x, and 1.033x for held-out questions 8, 9, and 10 respectively.
+
+The matched trajectory regime did **not** recover free-running agreement. In fact, adapted agreement was slightly below the raw H35 baseline in this run. Therefore the O decoding mismatch hypothesis is not supported by P.
+
+## P Decision
+
+**Result: trajectory mismatch rejected as the primary explanation.**
+
+The transition consistently improves teacher-forced token-distribution preservation, but that improvement does not survive autoregressive execution.
+
+This separates two properties:
+
+- **Local behavioral reconstruction:** supported.
+- **Stable autoregressive replacement of L36:** not supported.
+
+The remaining central problem is likely error accumulation after small token-level deviations, or missing information needed to determine when the learned replacement is safe.
+
+Increasing adapter capacity blindly is not justified yet.
+
+The next experiment should introduce **adaptive verification/gating**: use the cheap early-exit path when a learned gate predicts that it is safe, and execute L36 only when the gate predicts elevated risk. This trades some of the theoretical one-layer savings for the possibility of preserving the full model's trajectory when the approximation is unreliable.
 
 ## First Run Failure and Fix
 
