@@ -608,6 +608,7 @@ def main() -> int:
             result = evaluate(model, trace, relation, predictor, args)
             all_results.append(result)
             m = result["metrics"]
+            control = result["exact_state_injection_control"]
             print(
                 f"    state_cos={m['state_cosine_mean']:.4f} "
                 f"state_rel={m['state_relative_error_mean']:.4f} "
@@ -615,6 +616,20 @@ def main() -> int:
                 f"top1={m['top1_agreement']:.4f} "
                 f"target_ratio={m['target_probability_ratio_mean']:.4f}"
             )
+            print(
+                f"    exact_injection_control: "
+                f"KL={control['kl_baseline_to_counterfactual_mean']:.6f} "
+                f"top1={control['top1_agreement']:.6f}"
+            )
+            if result["persistence_baseline"] is not None:
+                copy = result["persistence_baseline"]
+                print(
+                    f"    persistence: "
+                    f"state_cos={copy['state_cosine_mean']:.4f} "
+                    f"state_rel={copy['state_relative_error_mean']:.4f} "
+                    f"KL={copy['downstream_kl_baseline_to_counterfactual_mean']:.4f} "
+                    f"top1={copy['downstream_top1_agreement']:.4f}"
+                )
         del predictor
         torch.cuda.empty_cache()
 
