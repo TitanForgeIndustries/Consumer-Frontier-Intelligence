@@ -195,8 +195,7 @@ def collect_trace(
 
     input_ids = full_ids[0].cpu()
 
-    del outputs, hidden_states, token_embeddings if False else None
-    del full_ids, output, inputs
+    del outputs, hidden_states, full_ids, output, inputs
     torch.cuda.empty_cache()
 
     predicted = extract_predicted(baseline_text)
@@ -251,7 +250,7 @@ def build_pairs(
             return empty, target.new_empty((0, target.shape[-1])), empty
         source_positions = torch.arange(start, stop)
         target_positions = source_positions
-        token_features = trace.token_embeddings[target_positions]
+        token_features = source.new_empty((source_positions.numel(), 0))
 
     return (
         source[source_positions],
