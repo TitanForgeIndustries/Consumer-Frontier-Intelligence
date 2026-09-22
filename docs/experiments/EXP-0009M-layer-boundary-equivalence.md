@@ -69,3 +69,29 @@ Begin with a one-question smoke run:
     python scripts/run_exp0009m.py --questions 1 --max-new-tokens 32 --output "E:\\Titan Forge Industries\\CFI-Data\\Results\\CFI-Eval-0009M-Layer-Boundary-Equivalence-Smoke"
 
 Only after the smoke run completes without an exception should the default 2-question control be run.
+
+
+## Smoke result: 2026-09-21
+
+The hardened 1-question smoke test completed successfully.
+
+- H35 vs actual L36 input: mean absolute difference = 0, mean L2 difference = 0, cosine = 1.0000006
+- direct actual L36 input vs functional L36 skip: KL = 0, top-1 = 1.0, logit L2 = 0
+- direct H35 vs functional L36 skip: KL = 0, top-1 = 1.0, logit L2 = 0
+- direct actual L36 input vs full oracle: KL = 0.72568107, top-1 = 0.875
+- direct H35 vs full oracle: KL = 0.72568107, top-1 = 0.875
+- L36 transformation: mean absolute difference = 6.5281, mean L2 = 579.7469, cosine = 0.5927
+
+This establishes the layer-boundary equivalence: H35 is exactly the tensor entering L36, and replacing L36 with identity is exactly equivalent to sending H35 through the model's existing final output stack.
+
+The L36 transformation is therefore behaviorally meaningful but not required to preserve the oracle distribution exactly. On the smoke sequence, the identity boundary retained 87.5% logit top-1 agreement and KL 0.726.
+
+## Decision
+
+The boundary is validated. Do not treat EXP-0009M as a software-control failure.
+
+The earlier EXP-0009L direct H35-exit result is now inconsistent with this validated boundary result and should be treated as an implementation/evaluation discrepancy until reconciled.
+
+Run the full M control next before another architectural experiment:
+
+    python scripts/run_exp0009m.py --questions 2 --max-new-tokens 64 --output "E:\\Titan Forge Industries\\CFI-Data\\Results\\CFI-Eval-0009M-Layer-Boundary-Equivalence"
