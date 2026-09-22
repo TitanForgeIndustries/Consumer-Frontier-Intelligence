@@ -91,8 +91,12 @@ def metrics(a: torch.Tensor, b: torch.Tensor) -> dict[str, float]:
 
 
 def logits_metrics(a: torch.Tensor, b: torch.Tensor) -> dict[str, float]:
-    la = F.log_softmax(a.float(), dim=-1)
-    lb = F.log_softmax(b.float(), dim=-1)
+    # Keep both operands on one device. The explicit CUDA->CPU conversion is
+    # useful here because most captured reference tensors are stored on CPU.
+    a = a.detach().float().cpu()
+    b = b.detach().float().cpu()
+    la = F.log_softmax(a, dim=-1)
+    lb = F.log_softmax(b, dim=-1)
     pa = la.exp()
     return {
         "kl": float((pa * (la - lb)).sum(dim=-1).mean().item()),
