@@ -300,7 +300,7 @@ def distribution_metrics(
     oracle_logp = F.log_softmax(oracle, dim=-1)
     candidate_logp = F.log_softmax(candidate, dim=-1)
     oracle_p = oracle_logp.exp()
-    target = target_ids.long().unsqueeze(-1)
+    target = target_ids.to(device=oracle.device, dtype=torch.long).unsqueeze(-1)
     oracle_top = oracle.argmax(-1)
     candidate_top = candidate.argmax(-1)
     oracle_target = oracle_p.gather(-1, target).squeeze(-1)
