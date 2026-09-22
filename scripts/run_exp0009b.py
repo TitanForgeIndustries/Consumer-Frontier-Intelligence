@@ -295,9 +295,9 @@ def train_predictor(
     source_layer, target_layer, temporal = relation_spec(relation)
 
     pairs = [build_pairs(trace, relation) for trace in traces]
-    xs = [x for x, y, f in pairs if x.numel()]
-    ys = [y for x, y, f in pairs if y.numel()]
-    fs = [f for x, y, f in pairs if f.numel()]
+    xs = [x for x, y, f in pairs if x.shape[0] > 0]
+    ys = [y for x, y, f in pairs if y.shape[0] > 0]
+    fs = [f for x, y, f in pairs if x.shape[0] > 0]
     if not xs:
         raise RuntimeError(f"No training state pairs for {relation}.")
 
