@@ -65,6 +65,8 @@ For each baseline trajectory the runner captures:
 
 The hidden-state indices are tied to the experimentally validated EXP-0009A convention.
 
+For layer 36, the experiment captures the decoder-layer output directly rather than using a post-model normalized representation. This keeps the measured H36 state on the same boundary where the injection hook substitutes the state.
+
 ## Predictor design
 
 The predictor receives the source state and, for temporal relations, the next-token embedding.
