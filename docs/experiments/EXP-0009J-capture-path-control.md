@@ -54,3 +54,34 @@ Run:
 ## Limits
 
 J is a control experiment. It does not claim a scientific architecture result or speedup.
+
+
+## Smoke result: 2026-09-21
+
+All four capture-path comparisons were exactly stable:
+
+- H35 false/false: mean absolute difference = 0
+- H35 true/true: mean absolute difference = 0
+- H35 true-vs-false: mean absolute difference = 0
+- L36 attention false/false: mean absolute difference = 0
+- L36 attention true/true: mean absolute difference = 0
+- L36 attention true-vs-false: mean absolute difference = 0
+- L36 MLP false/false: mean absolute difference = 0
+- L36 MLP true/true: mean absolute difference = 0
+- L36 MLP true-vs-false: mean absolute difference = 0
+- H36 false/false: mean absolute difference = 0
+- H36 true/true: mean absolute difference = 0
+- H36 true-vs-false: mean absolute difference = 0
+- final logits were exactly identical in all three comparisons
+
+Therefore the EXP-0009H stored-vs-fresh discrepancy was not caused by output_hidden_states configuration. It was specific to the earlier capture path implementation.
+
+## Decision
+
+The capture-path issue is closed.
+
+The combined EXP-0009I/J evidence now supports moving away from the instability hypothesis and away from another raw H35 -> H36 reconstruction attempt.
+
+The next architectural diagnostic should target downstream behavior directly: approximate the final token distribution from H35 while bypassing the full L36 transition. This tests whether a much smaller learned exit can preserve behavior without requiring an accurate reconstruction of the internal H36 state.
+
+J remains a control experiment and does not claim a speedup.
