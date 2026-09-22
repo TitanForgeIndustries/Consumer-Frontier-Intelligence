@@ -124,3 +124,20 @@ python scripts/run_exp0009p.py --questions 10 --train-questions 7 --max-new-toke
 ## Status
 
 Implementation committed. Runtime measurements pending.
+
+
+## First Run Failure and Fix
+
+The first P execution completed all ten matched-greedy trace captures and all 16 training epochs. It then stopped during held-out question 8 before producing evaluation results.
+
+Failure:
+
+```
+RuntimeError: expected scalar type Float but found BFloat16
+```
+
+The cause was a dtype mismatch in the teacher-forced evaluation path. Captured H35 states are BF16, while the trained transition is maintained in FP32 for training. The runtime path in EXP-0009O already handled this conversion explicitly.
+
+The evaluation path was corrected to cast H35 inputs to the trained transition's parameter dtype before the transition forward pass. No model weights or experiment architecture were changed.
+
+The failed run is retained as an implementation failure, not treated as a scientific result.
