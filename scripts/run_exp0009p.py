@@ -358,6 +358,14 @@ def main() -> int:
                 "full": full,
                 "raw_h35": raw,
                 "adapted": adapted,
+                "raw_vs_full": compare_tokens(
+                    full["tokens"],
+                    raw["tokens"],
+                ),
+                "adapted_vs_full": compare_tokens(
+                    full["tokens"],
+                    adapted["tokens"],
+                ),
             }
         )
 
@@ -372,12 +380,13 @@ def main() -> int:
             f"  raw H35: {raw_time:.3f}s "
             f"({raw['mean_tokens_per_second']:.2f} tok/s), "
             f"speedup={full_time / raw_time:.3f}x, "
-            f"agreement={raw['mean_tokens_per_second'] and raw['generated_tokens']}"
+            f"agreement={results[-1]['raw_vs_full']['exact_token_agreement']:.3f}"
         )
         print(
             f"  adapted: {adapted_time:.3f}s "
             f"({adapted['mean_tokens_per_second']:.2f} tok/s), "
-            f"speedup={full_time / adapted_time:.3f}x"
+            f"speedup={full_time / adapted_time:.3f}x, "
+            f"agreement={results[-1]['adapted_vs_full']['exact_token_agreement']:.3f}"
         )
 
     def mean_teacher(mode: str, metric: str) -> float:
@@ -465,41 +474,15 @@ def main() -> int:
             ) / len(results),
             "raw_h35_token_agreement_mean": sum(
                 r["raw_vs_full"]["exact_token_agreement"]
-                if "raw_vs_full" in r
-                else 0.0
                 for r in results
             ) / len(results),
             "adapted_token_agreement_mean": sum(
                 r["adapted_vs_full"]["exact_token_agreement"]
-                if "adapted_vs_full" in r
-                else 0.0
                 for r in results
             ) / len(results),
         },
         "results": results,
     }
-
-    # Benchmark rows returned by O already contain token-agreement fields.
-    for row in results:
-        row["raw_vs_full"] = row["raw_vs_full"] if "raw_vs_full" in row else compare_tokens(
-            row["full"]["tokens"],
-            row["raw_h35"]["tokens"],
-        )
-        row["adapted_vs_full"] = (
-            row["adapted_vs_full"]
-            if "adapted_vs_full" in row
-            else compare_tokens(
-                row["full"]["tokens"],
-                row["adapted"]["tokens"],
-            )
-        )
-
-    summary["runtime"]["raw_h35_token_agreement_mean"] = sum(
-        row["raw_vs_full"]["exact_token_agreement"] for row in results
-    ) / len(results)
-    summary["runtime"]["adapted_token_agreement_mean"] = sum(
-        row["adapted_vs_full"]["exact_token_agreement"] for row in results
-    ) / len(results)
 
     (args.output / "summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False),
