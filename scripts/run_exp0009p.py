@@ -196,7 +196,13 @@ def heldout_teacher_forced(
         ).float()
 
         transition.eval()
-        adapted_state = transition(source.to("cuda:0"))
+        transition_dtype = next(transition.parameters()).dtype
+        adapted_state = transition(
+            source.to(
+                device="cuda:0",
+                dtype=transition_dtype,
+            )
+        )
         adapted = base_exit_logits(
             model,
             adapted_state,
