@@ -79,3 +79,28 @@ Run:
 - Adapted exit remains far below both -> H35 alone is insufficient for this compact transition; add a richer source representation such as H34-H35 features or a small recurrent/context state.
 
 No speedup claim is made by L.
+
+
+## Evaluation bug identified: 2026-09-21
+
+The initial smoke evaluation used local evaluation indices to select H35:
+
+\`source = trace.h35[indices]\`
+
+while oracle logits were selected using absolute sequence positions:
+
+\`oracle = logits[positions]\`
+
+Because \`positions\` begins at \`prompt_length - 1\`, the learned exit was evaluated on the wrong hidden-state positions. This explains the catastrophic held-out KL values.
+
+The corrected evaluation uses:
+
+\`source = trace.h35[positions]\`
+
+so the H35 source and oracle logits refer to the same sequence positions.
+
+The initial EXP-0009L smoke result must therefore be treated as **invalid due to evaluation indexing**, not as a scientific negative result.
+
+Commit containing the fix: \`748f001e601a0eba5ed000d6112ed58a4b18b60e\`.
+
+A new smoke run should be performed before interpreting L.
