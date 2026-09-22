@@ -30,7 +30,12 @@ from run_exp0008 import (
     format_prompt,
     load_rows,
 )
-from run_exp0009n import base_exit_logits, build_model, seed_all
+from run_exp0009n import (
+    base_exit_logits,
+    build_model,
+    distribution_metrics,
+    seed_all,
+)
 
 
 DEFAULT_MODEL = Path(
