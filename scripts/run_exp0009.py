@@ -343,13 +343,15 @@ class Injector:
     def hook(self, _module: Any, _inputs: Any, output: Any) -> Any:
         if torch.is_tensor(output):
             tensor = output.clone()
-            tensor[:, self.positions, :] = self.states
+            states = self.states.to(device=tensor.device, dtype=tensor.dtype)
+            tensor[:, self.positions, :] = states
             return tensor
 
         if isinstance(output, tuple):
             values = list(output)
             values[0] = values[0].clone()
-            values[0][:, self.positions, :] = self.states
+            states = self.states.to(device=values[0].device, dtype=values[0].dtype)
+            values[0][:, self.positions, :] = states
             return tuple(values)
 
         if isinstance(output, list):
