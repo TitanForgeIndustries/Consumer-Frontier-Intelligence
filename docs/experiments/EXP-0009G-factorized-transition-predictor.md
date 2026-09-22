@@ -123,3 +123,101 @@ It does not demonstrate a hardware speedup.
 The smoke test is too small for generalization claims.
 
 A positive teacher-forced result still requires autoregressive rollout and timing.
+
+
+## Smoke result: 2026-09-21
+
+Command:
+
+    python scripts/run_exp0009g.py --questions 4 --train-questions 2 --relations h35_to_h36 --max-new-tokens 128 --epochs 4 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009G-Factorized-Transition-Predictor"
+
+Exact-state injection passed:
+
+- KL = 0.000000
+- top-1 = 1.000000
+
+### Held-out question 3
+
+Predictor:
+
+- state cosine: 0.5711
+- state relative error: 0.9548
+- KL: 0.1608
+- top-1: 0.9531
+- target probability ratio: 0.9946
+
+Copy:
+
+- KL: 0.1637
+- top-1: 0.9531
+
+### Held-out question 4
+
+Predictor:
+
+- state cosine: 0.6154
+- state relative error: 0.9101
+- KL: 0.1057
+- top-1: 0.9375
+- target probability ratio: 0.9815
+
+Copy:
+
+- KL: 0.1101
+- top-1: 0.9375
+
+Aggregate:
+
+- predictor KL: 0.13322094
+- copy KL: 0.1369
+- predictor top-1: 0.9453125
+- copy top-1: 0.9453125
+- predictor target probability ratio: 0.9880363
+- source update ratio: 0.00585843
+
+The factorized global-local predictor remains near the copy solution. It gives a small KL reduction on both held-out questions, but top-1 behavior is unchanged and the state update remains very small.
+
+## Decision
+
+EXP-0009G does not demonstrate meaningful improvement over source-state copying.
+
+Across D, E, F, and G, four different predictor formulations converge to approximately the same behavioral region for H35 -> H36:
+
+- D: unconstrained behavioral predictor
+- E: full-vocabulary KL plus copy anchor
+- F: bounded local/context predictor
+- G: bounded factorized global/local predictor
+
+This repetition is important. Increasing architectural resemblance to the target layer has not produced a materially different result.
+
+The research should therefore stop iterating on generic state predictors for this relation and test a more diagnostic question.
+
+## Next experiment direction
+
+The next experiment should decompose the actual H35 -> H36 transformation into its attention and MLP components and measure their predictability from H35.
+
+The purpose is not to claim a usable predictor. It is to establish where the information bottleneck actually is.
+
+For each token position, capture:
+
+- H35 source state
+- layer-36 attention output
+- layer-36 MLP output
+- final H36 state
+
+Then train small source-only probes for:
+
+1. attention output prediction
+2. MLP output prediction
+3. total layer delta prediction
+
+Evaluate both representation error and downstream effect when each predicted component is substituted.
+
+This will distinguish at least three possibilities:
+
+- the layer components are individually predictable but the combined state is difficult to preserve
+- one component is the dominant unpredictability bottleneck
+- neither component is predictably recoverable from H35 alone
+
+That diagnostic is more informative than another generic predictor architecture.
+
