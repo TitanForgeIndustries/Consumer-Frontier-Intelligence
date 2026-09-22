@@ -154,3 +154,20 @@ No model weights, training objective, or runtime replacement architecture were c
 The failed run is recorded as an implementation failure, not a scientific result.
 
 The transition training itself completed successfully before the failure. The final training loss in the interrupted run was 0.058531.
+
+
+### Second Implementation Failure and Fix
+
+The corrected rerun then reached held-out evaluation but stopped with:
+
+```
+NameError: name 'distribution_metrics' is not defined
+```
+
+The evaluation function called the established `distribution_metrics()` helper but the import had been omitted from the final Q script.
+
+The helper import is now restored from `run_exp0009n.py`.
+
+No experiment logic or model behavior was changed.
+
+This run is also recorded as an implementation failure, not a scientific result.
