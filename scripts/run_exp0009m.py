@@ -91,20 +91,48 @@ def metrics(a: torch.Tensor, b: torch.Tensor) -> dict[str, float]:
 
 
 def logits_metrics(a: torch.Tensor, b: torch.Tensor) -> dict[str, float]:
-    # Keep both operands on one device. The explicit CUDA->CPU conversion is
-    # useful here because most captured reference tensors are stored on CPU.
-    a = a.detach().float().cpu()
-    b = b.detach().float().cpu()
+    """Compare already-materialized CPU logits only."""
+    a = a.detach().float().cpu().contiguous()
+    b = b.detach().float().cpu().contiguous()
+    if a.ndim != 2 or b.ndim != 2 or a.shape != b.shape:
+        raise RuntimeError(
+            f"Logit comparison shape mismatch: a={tuple(a.shape)} b={tuple(b.shape)}"
+        )
+
     la = F.log_softmax(a, dim=-1)
     lb = F.log_softmax(b, dim=-1)
     pa = la.exp()
+
     return {
         "kl": float((pa * (la - lb)).sum(dim=-1).mean().item()),
-        "top1": float((a.argmax(dim=-1) == b.argmax(dim=-1)).float().mean().item()),
-        "l2": float(torch.linalg.vector_norm(a.float() - b.float(), dim=-1).mean().item()),
+        "top1": float(
+            (a.argmax(dim=-1) == b.argmax(dim=-1)).float().mean().item()
+        ),
+        "l2": float(
+            torch.linalg.vector_norm(a - b, dim=-1).mean().item()
+        ),
     }
 
 
+def direct_final_selected(model: Any, hidden_cpu: torch.Tensor) -> torch.Tensor:
+    """Run only selected hidden states through the existing output stack."""
+    if hidden_cpu.ndim != 2:
+        raise RuntimeError(
+            f"Expected [positions, hidden] CPU tensor, got {tuple(hidden_cpu.shape)}"
+        )
+
+    norm = model.model.norm
+    lm_head = model.lm_head
+
+    x = hidden_cpu.to(
+        device=norm.weight.device,
+        dtype=norm.weight.dtype,
+        non_blocking=False,
+    )
+    with torch.inference_mode():
+        logits = lm_head(norm(x))
+    torch.cuda.synchronize()
+    return logits.detach().float().cpu().contiguous()
 def direct_final(model: Any, hidden: torch.Tensor) -> torch.Tensor:
     norm = model.model.norm
     lm_head = model.lm_head
@@ -112,66 +140,68 @@ def direct_final(model: Any, hidden: torch.Tensor) -> torch.Tensor:
     return lm_head(norm(x)).float()
 
 
-class SameForwardSkip:
-    def __init__(self, layer: Any) -> None:
-        self.handle = layer.register_forward_hook(self.hook)
-        self.captured_input: list[torch.Tensor] = []
-        self.captured_output: list[torch.Tensor] = []
+class SameForwardBoundary:
+    """Capture H35 and the exact L36 input/output in one forward."""
 
-    def hook(self, _module: Any, inputs: Any, output: Any) -> Any:
+    def __init__(self, model: Any) -> None:
+        self.layer35 = model.model.layers[34]
+        self.layer36 = model.model.layers[35]
+        self.handle35 = self.layer35.register_forward_hook(self.capture_h35)
+        self.handle36 = self.layer36.register_forward_hook(self.capture_l36)
+
+        self.h35: list[torch.Tensor] = []
+        self.l36_input: list[torch.Tensor] = []
+        self.l36_output: list[torch.Tensor] = []
+
+    def capture_h35(self, _module: Any, _inputs: Any, output: Any) -> None:
+        self.h35.append(component_tensor(output).detach().float().cpu())
+
+    def capture_l36(
+        self,
+        _module: Any,
+        inputs: Any,
+        output: Any,
+    ) -> Any:
         hidden = inputs[0]
-        self.captured_input.append(hidden.detach().float().cpu())
-        self.captured_output.append(component_tensor(output).detach().float().cpu())
+        self.l36_input.append(hidden.detach().float().cpu())
+        self.l36_output.append(component_tensor(output).detach().float().cpu())
 
+        # Functional skip: preserve all auxiliary return values but replace
+        # the primary hidden-state output with the exact L36 input.
         if torch.is_tensor(output):
             return hidden.clone()
+
         if isinstance(output, tuple):
             values = list(output)
             values[0] = hidden.clone()
             return tuple(values)
+
         if isinstance(output, list):
             values = list(output)
             values[0] = hidden.clone()
             return values
+
         raise TypeError(f"Unexpected layer output: {type(output).__name__}")
 
     def remove(self) -> None:
-        self.handle.remove()
+        self.handle35.remove()
+        self.handle36.remove()
 
 
-def capture_once(
+def capture_oracle(
     model: Any,
     full_ids: torch.Tensor,
-    capture_h35: bool,
 ) -> dict[str, torch.Tensor]:
-    layer = model.model.layers[35]
-    h35_values: list[torch.Tensor] = []
-
-    def h35_hook(_m: Any, _i: Any, o: Any) -> None:
-        h35_values.append(component_tensor(o).detach().float().cpu())
-
-    handle = None
-    if capture_h35:
-        handle = model.model.layers[34].register_forward_hook(h35_hook)
-
-    try:
-        with torch.inference_mode():
-            out = model(
-                input_ids=full_ids,
-                attention_mask=torch.ones_like(full_ids),
-                use_cache=False,
-            )
-    finally:
-        if handle is not None:
-            handle.remove()
-
-    result = {
-        "logits": out.logits.detach().float().cpu()[0],
+    with torch.inference_mode():
+        out = model(
+            input_ids=full_ids,
+            attention_mask=torch.ones_like(full_ids),
+            use_cache=False,
+        )
+    torch.cuda.synchronize()
+    return {
+        "logits": out.logits.detach().float().cpu().contiguous()[0],
     }
-    if capture_h35:
-        result["h35"] = h35_values[0][0]
-    del out
-    return result
 
 
 def main() -> int:
@@ -188,8 +218,10 @@ def main() -> int:
     results = []
     for index, row in enumerate(rows, 1):
         prompt = format_prompt(str(row["question"]))
-        torch.manual_seed(args.seed_base + index)
-        torch.cuda.manual_seed_all(args.seed_base + index)
+        seed = args.seed_base + index
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
         inputs = tokenizer(prompt, return_tensors="pt").to("cuda:0")
 
         with torch.inference_mode():
@@ -204,89 +236,118 @@ def main() -> int:
                 stop_strings=["\nQuestion:", "\nProblem:"],
                 tokenizer=tokenizer,
             )
+        torch.cuda.synchronize()
 
         full_ids = generated.detach()
-
-        # Oracle + H35 capture.
-        oracle = capture_once(model, full_ids, True)
-
-        # Same-forward L36 skip. The hook captures the exact tensor entering
-        # L36 before replacing the layer's output with that same tensor.
-        skipper = SameForwardSkip(model.model.layers[35])
-        try:
-            with torch.inference_mode():
-                skipped_out = model(
-                    input_ids=full_ids,
-                    attention_mask=torch.ones_like(full_ids),
-                    use_cache=False,
-                )
-        finally:
-            skipper.remove()
-
-        if len(skipper.captured_input) != 1 or len(skipper.captured_output) != 1:
-            raise RuntimeError("Expected one L36 input/output capture.")
-
-        l36_input = skipper.captured_input[0][0]
-        l36_output = skipper.captured_output[0][0]
-
-        h35 = oracle["h35"]
-
         prompt_len = int(inputs["input_ids"].shape[-1])
         seq_len = int(full_ids.shape[-1])
+
         if seq_len <= prompt_len:
             raise RuntimeError(
                 f"Generated sequence has no predicted positions: "
                 f"prompt_len={prompt_len}, seq_len={seq_len}"
             )
+
         positions = torch.arange(
             prompt_len - 1,
             seq_len - 1,
             dtype=torch.long,
         )
+        if positions.min().item() < 0 or positions.max().item() >= seq_len:
+            raise RuntimeError(
+                f"Invalid position range: min={positions.min().item()} "
+                f"max={positions.max().item()} seq_len={seq_len}"
+            )
 
-        pos = positions.cpu()
+        # Untouched oracle forward.
+        oracle = capture_oracle(model, full_ids)
 
-        captured_h35 = h35[pos]
-        captured_l36_input = l36_input[pos]
+        # One separate forward captures H35 and the exact tensor entering L36,
+        # then replaces the L36 output with that exact input.
+        boundary = SameForwardBoundary(model)
+        try:
+            with torch.inference_mode():
+                skipped = model(
+                    input_ids=full_ids,
+                    attention_mask=torch.ones_like(full_ids),
+                    use_cache=False,
+                )
+            torch.cuda.synchronize()
+        finally:
+            boundary.remove()
 
-        direct = direct_final(model, captured_l36_input)
-        direct_h35 = direct_final(model, captured_h35)
-        skipped_logits = skipped_out.logits.detach().float().cpu()[0]
+        for name, values in (
+            ("H35", boundary.h35),
+            ("L36 input", boundary.l36_input),
+            ("L36 output", boundary.l36_output),
+        ):
+            if len(values) != 1:
+                raise RuntimeError(f"Expected one {name} capture, got {len(values)}.")
+
+        h35 = boundary.h35[0][0].contiguous()
+        l36_input = boundary.l36_input[0][0].contiguous()
+        l36_output = boundary.l36_output[0][0].contiguous()
+        skipped_logits = skipped.logits.detach().float().cpu().contiguous()[0]
+
+        h35_sel = h35[positions]
+        l36_input_sel = l36_input[positions]
+        l36_output_sel = l36_output[positions]
+        oracle_sel = oracle["logits"][positions]
+        skipped_sel = skipped_logits[positions]
+
+        if (
+            h35.shape[0] != seq_len
+            or l36_input.shape[0] != seq_len
+            or l36_output.shape[0] != seq_len
+            or skipped_logits.shape[0] != seq_len
+            or oracle["logits"].shape[0] != seq_len
+        ):
+            raise RuntimeError(
+                "Sequence-length mismatch: "
+                f"full={seq_len}, h35={h35.shape[0]}, "
+                f"l36_input={l36_input.shape[0]}, l36_output={l36_output.shape[0]}, "
+                f"skip_logits={skipped_logits.shape[0]}, oracle={oracle['logits'].shape[0]}"
+            )
+
+        torch.cuda.synchronize()
+        direct_l36_input = direct_final_selected(model, l36_input_sel)
+        direct_h35 = direct_final_selected(model, h35_sel)
 
         result = {
             "question_index": index,
-            "generated_tokens": int(full_ids.shape[-1] - prompt_len),
-            "evaluated_positions": int(pos.numel()),
-            "h35_vs_l36_input": metrics(captured_h35, captured_l36_input),
+            "generated_tokens": int(seq_len - prompt_len),
+            "evaluated_positions": int(positions.numel()),
+            "h35_vs_actual_l36_input": metrics(h35_sel, l36_input_sel),
             "direct_l36_input_vs_skip": logits_metrics(
-                direct[pos],
-                skipped_logits[pos],
+                direct_l36_input,
+                skipped_sel,
             ),
             "direct_h35_vs_skip": logits_metrics(
-                direct_h35[pos],
-                skipped_logits[pos],
+                direct_h35,
+                skipped_sel,
             ),
             "direct_l36_input_vs_oracle": logits_metrics(
-                direct[pos],
-                oracle["logits"][pos],
+                direct_l36_input,
+                oracle_sel,
             ),
             "direct_h35_vs_oracle": logits_metrics(
-                direct_h35[pos],
-                oracle["logits"][pos],
+                direct_h35,
+                oracle_sel,
             ),
-            "h36_change_from_l36": metrics(
-                captured_l36_input,
-                l36_output[pos],
+            "l36_transformation": metrics(
+                l36_input_sel,
+                l36_output_sel,
             ),
         }
         results.append(result)
 
         print(f"\n[{index}/{len(rows)}]")
+        h = result["h35_vs_actual_l36_input"]
         print(
             f"  H35 vs actual L36 input: "
-            f"mean_abs={result['h35_vs_l36_input']['mean_abs']:.8f} "
-            f"l2={result['h35_vs_l36_input']['mean_l2']:.8f} "
-            f"cos={result['h35_vs_l36_input']['cosine_mean']:.8f}"
+            f"mean_abs={h['mean_abs']:.8f} "
+            f"l2={h['mean_l2']:.8f} "
+            f"cos={h['cosine_mean']:.8f}"
         )
         for name in (
             "direct_l36_input_vs_skip",
@@ -298,13 +359,13 @@ def main() -> int:
             print(
                 f"  {name}: KL={m['kl']:.8f} top1={m['top1']:.6f} l2={m['l2']:.4f}"
             )
+        m = result["l36_transformation"]
         print(
-            f"  L36 transformation: mean_abs={result['h36_change_from_l36']['mean_abs']:.4f} "
-            f"l2={result['h36_change_from_l36']['mean_l2']:.4f} "
-            f"cos={result['h36_change_from_l36']['cosine_mean']:.4f}"
+            f"  L36 transformation: mean_abs={m['mean_abs']:.4f} "
+            f"l2={m['mean_l2']:.4f} cos={m['cosine_mean']:.4f}"
         )
 
-        del inputs, generated, full_ids, oracle, skipper, skipped_out
+        del inputs, generated, full_ids, oracle, skipped
         torch.cuda.empty_cache()
 
     summary = {
@@ -317,6 +378,7 @@ def main() -> int:
     }
     with (args.output / "summary.json").open("w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
+
     print(f"\nResults: {args.output}")
     return 0
 
