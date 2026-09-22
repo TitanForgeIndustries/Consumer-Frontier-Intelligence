@@ -618,7 +618,7 @@ def main() -> int:
             )
             print(
                 f"    exact_injection_control: "
-                f"KL={control['kl_baseline_to_counterfactual_mean']:.6f} "
+                f"KL={control['kl_oracle_to_candidate_mean']:.6f} "
                 f"top1={control['top1_agreement']:.6f}"
             )
             if result["persistence_baseline"] is not None:
@@ -627,7 +627,7 @@ def main() -> int:
                     f"    persistence: "
                     f"state_cos={copy['state_cosine_mean']:.4f} "
                     f"state_rel={copy['state_relative_error_mean']:.4f} "
-                    f"KL={copy['downstream_kl_baseline_to_counterfactual_mean']:.4f} "
+                    f"KL={copy['downstream_kl_oracle_to_candidate_mean']:.4f} "
                     f"top1={copy['downstream_top1_agreement']:.4f}"
                 )
         del predictor
