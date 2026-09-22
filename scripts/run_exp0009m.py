@@ -232,12 +232,19 @@ def main() -> int:
         h35 = oracle["h35"]
 
         prompt_len = int(inputs["input_ids"].shape[-1])
+        seq_len = int(full_ids.shape[-1])
+        if seq_len <= prompt_len:
+            raise RuntimeError(
+                f"Generated sequence has no predicted positions: "
+                f"prompt_len={prompt_len}, seq_len={seq_len}"
+            )
         positions = torch.arange(
             prompt_len - 1,
-            full_ids.shape[-1] - 1,
+            seq_len - 1,
+            dtype=torch.long,
         )
 
-        pos = positions
+        pos = positions.cpu()
 
         captured_h35 = h35[pos]
         captured_l36_input = l36_input[pos]
@@ -252,19 +259,19 @@ def main() -> int:
             "evaluated_positions": int(pos.numel()),
             "h35_vs_l36_input": metrics(captured_h35, captured_l36_input),
             "direct_l36_input_vs_skip": logits_metrics(
-                direct[pos.to("cuda:0") if direct.is_cuda else pos],
+                direct[pos],
                 skipped_logits[pos],
             ),
             "direct_h35_vs_skip": logits_metrics(
-                direct_h35[pos.to("cuda:0") if direct_h35.is_cuda else pos],
+                direct_h35[pos],
                 skipped_logits[pos],
             ),
             "direct_l36_input_vs_oracle": logits_metrics(
-                direct[pos.to("cuda:0") if direct.is_cuda else pos],
+                direct[pos],
                 oracle["logits"][pos],
             ),
             "direct_h35_vs_oracle": logits_metrics(
-                direct_h35[pos.to("cuda:0") if direct_h35.is_cuda else pos],
+                direct_h35[pos],
                 oracle["logits"][pos],
             ),
             "h36_change_from_l36": metrics(
