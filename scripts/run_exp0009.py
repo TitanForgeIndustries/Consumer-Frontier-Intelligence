@@ -367,6 +367,30 @@ class Injector:
         self.handle.remove()
 
 
+def compare_logits(
+    oracle: torch.Tensor,
+    candidate: torch.Tensor,
+    target_ids: torch.Tensor,
+) -> dict[str, float]:
+    return distribution_metrics(oracle, candidate, target_ids)
+
+
+def state_metrics(
+    predicted: torch.Tensor,
+    target: torch.Tensor,
+) -> dict[str, float]:
+    cosine = F.cosine_similarity(predicted, target, dim=-1)
+    relative = (
+        torch.linalg.vector_norm(predicted - target, dim=-1)
+        / torch.linalg.vector_norm(target, dim=-1).clamp_min(1e-8)
+    )
+    return {
+        "state_cosine_mean": float(cosine.mean().item()),
+        "state_relative_error_mean": float(relative.mean().item()),
+        "state_mse_mean": float(F.mse_loss(predicted, target).item()),
+    }
+
+
 def evaluate(
     model: Any,
     trace: Trace,
@@ -377,7 +401,9 @@ def evaluate(
     source_layer, target_layer = RELATIONS[relation]
     source, target = pair_states(trace, source_layer, target_layer)
     if source.shape[0] < 1:
-        raise RuntimeError(f"No evaluation pairs for {relation} / question {trace.index}.")
+        raise RuntimeError(
+            f"No evaluation pairs for {relation} / question {trace.index}."
+        )
 
     count = source.shape[0]
     max_tokens = args.max_eval_tokens or count
@@ -404,7 +430,25 @@ def evaluate(
     with torch.inference_mode():
         pred_states = predictor(source_eval.to("cuda:0")).float()
 
-    injector = Injector(model, target_layer, positions, pred_states)
+    # Control: injecting the exact target state should reproduce the oracle
+    # downstream distribution. This validates layer/position semantics before
+    # interpreting a learned predictor.
+    exact_injector = Injector(model, target_layer, positions, target_eval)
+    try:
+        with torch.inference_mode():
+            exact_candidate = model(
+                input_ids=input_ids,
+                attention_mask=attention,
+                use_cache=False,
+            ).logits[0, positions.to("cuda:0")].float()
+    finally:
+        exact_injector.remove()
+
+    exact_metrics = compare_logits(
+        oracle, exact_candidate, trace.input_ids[positions + 1]
+    )
+
+    predicted_injector = Injector(model, target_layer, positions, pred_states)
     try:
         with torch.inference_mode():
             candidate = model(
@@ -413,23 +457,50 @@ def evaluate(
                 use_cache=False,
             ).logits[0, positions.to("cuda:0")].float()
     finally:
-        injector.remove()
+        predicted_injector.remove()
 
-    state_cos = F.cosine_similarity(pred_states.cpu(), target_eval, dim=-1)
-    state_rel = (
-        torch.linalg.vector_norm(pred_states.cpu() - target_eval, dim=-1)
-        / torch.linalg.vector_norm(target_eval, dim=-1).clamp_min(1e-8)
+    metrics = compare_logits(
+        oracle,
+        candidate,
+        trace.input_ids[positions + 1],
     )
-    next_ids = trace.input_ids[positions + 1]
-    metrics = distribution_metrics(oracle.cpu(), candidate.cpu(), next_ids.cpu())
-    metrics.update(
-        {
-            "state_cosine_mean": float(state_cos.mean().item()),
-            "state_relative_error_mean": float(state_rel.mean().item()),
-            "state_mse_mean": float(F.mse_loss(pred_states.cpu(), target_eval).item()),
-            "evaluated_pairs": float(len(keep)),
+    metrics.update(state_metrics(pred_states.cpu(), target_eval))
+
+    # For same-layer prediction, compare against the simplest predictor:
+    # copy the current state forward unchanged. This establishes whether the
+    # learned predictor beats persistence rather than only reporting absolute
+    # prediction quality.
+    copy_metrics: dict[str, float] | None = None
+    if source_layer == target_layer:
+        copy_state = source_eval
+        copy_metrics = {
+            **state_metrics(copy_state, target_eval),
         }
-    )
+        copy_injector = Injector(
+            model, target_layer, positions, copy_state
+        )
+        try:
+            with torch.inference_mode():
+                copy_candidate = model(
+                    input_ids=input_ids,
+                    attention_mask=attention,
+                    use_cache=False,
+                ).logits[0, positions.to("cuda:0")].float()
+        finally:
+            copy_injector.remove()
+        copy_logits = compare_logits(
+            oracle,
+            copy_candidate,
+            trace.input_ids[positions + 1],
+        )
+        copy_metrics.update(
+            {
+                f"downstream_{key}": value
+                for key, value in copy_logits.items()
+                if key != "token_count"
+            }
+        )
+
     return {
         "relation": relation,
         "source_layer": source_layer,
@@ -441,8 +512,10 @@ def evaluate(
         "baseline_correct": trace.baseline_correct,
         "generated_tokens": trace.generated_tokens,
         "metrics": metrics,
+        "exact_state_injection_control": exact_metrics,
+        "persistence_baseline": copy_metrics,
+        "evaluated_pairs": len(keep),
     }
-
 
 def finite_round(value: float) -> float | None:
     return round(value, 8) if math.isfinite(value) else None
