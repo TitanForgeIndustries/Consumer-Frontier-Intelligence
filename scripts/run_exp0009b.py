@@ -172,30 +172,53 @@ def collect_trace(
         generated_ids, skip_special_tokens=True
     ).strip()
 
-    with torch.inference_mode():
-        outputs = model(
-            input_ids=full_ids,
-            attention_mask=torch.ones_like(full_ids),
-            use_cache=False,
-            output_hidden_states=True,
-        )
+    h36_capture: list[torch.Tensor] = []
 
-        hidden_states = outputs.hidden_states
-        if hidden_states is None or len(hidden_states) <= 36:
-            raise RuntimeError(
-                "Model did not expose hidden states through layer 36."
+    def capture_h36(_module: Any, _inputs: Any, layer_output: Any) -> None:
+        if torch.is_tensor(layer_output):
+            tensor = layer_output
+        elif isinstance(layer_output, (tuple, list)) and layer_output:
+            tensor = layer_output[0]
+        else:
+            raise TypeError(
+                f"Unexpected layer-36 output: {type(layer_output).__name__}"
             )
+        h36_capture.append(tensor.detach().float().cpu())
 
-        h30 = hidden_states[30][0].float().cpu()
-        h35 = hidden_states[35][0].float().cpu()
-        h36 = hidden_states[36][0].float().cpu()
-        token_embeddings = (
-            model.get_input_embeddings()(full_ids)[0].float().cpu()
+    h36_handle = model.model.layers[35].register_forward_hook(capture_h36)
+    try:
+        with torch.inference_mode():
+            outputs = model(
+                input_ids=full_ids,
+                attention_mask=torch.ones_like(full_ids),
+                use_cache=False,
+                output_hidden_states=True,
+            )
+    finally:
+        h36_handle.remove()
+
+    hidden_states = outputs.hidden_states
+    if hidden_states is None or len(hidden_states) <= 35:
+        raise RuntimeError(
+            "Model did not expose hidden states through layer 35."
         )
+    if len(h36_capture) != 1:
+        raise RuntimeError(
+            f"Expected exactly one layer-36 capture, got {len(h36_capture)}."
+        )
+
+    h30 = hidden_states[30][0].float().cpu()
+    h35 = hidden_states[35][0].float().cpu()
+    # H36 is captured directly from decoder layer 36 output, before Qwen3's
+    # final model RMSNorm. This is the same boundary used by state injection.
+    h36 = h36_capture[0]
+    token_embeddings = (
+        model.get_input_embeddings()(full_ids)[0].float().cpu()
+    )
 
     input_ids = full_ids[0].cpu()
 
-    del outputs, hidden_states, full_ids, output, inputs
+    del outputs, hidden_states, h36_capture, full_ids, output, inputs
     torch.cuda.empty_cache()
 
     predicted = extract_predicted(baseline_text)
