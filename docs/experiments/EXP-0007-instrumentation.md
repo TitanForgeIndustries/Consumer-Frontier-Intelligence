@@ -106,6 +106,12 @@ Files:
 
 JSON and JSONL are the source of truth. Hardware telemetry requires the repository package and its system dependency to be installed in the active environment.
 
+The sublayer summary is generated from the nested attention/MLP records in sublayer_metrics.jsonl. An existing raw run can be recovered without rerunning inference:
+
+python scripts/summarize_exp0007_sublayers.py
+
+The recovery script streams the JSONL file and rebuilds sublayer_summary.json.
+
 ## Five-question gate
 
 Run from the CFI repository environment:
