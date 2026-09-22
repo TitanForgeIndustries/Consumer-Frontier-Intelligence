@@ -446,6 +446,51 @@ def evaluate_probe(
             f"KL={repeat_metrics['kl_oracle_to_candidate_mean']:.8f}"
         )
 
+    # Re-capture the untouched component immediately before replay. This
+    # distinguishes stored-capture mismatch from injector semantics.
+    fresh_capture: list[torch.Tensor] = []
+
+    def capture_fresh(_module: Any, _inputs: Any, output_value: Any) -> None:
+        fresh_capture.append(
+            component_tensor(output_value).detach().float().cpu()
+        )
+
+    fresh_handle = module.register_forward_hook(capture_fresh)
+    try:
+        with torch.inference_mode():
+            fresh_outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                use_cache=False,
+            )
+    finally:
+        fresh_handle.remove()
+
+    if len(fresh_capture) != 1:
+        raise RuntimeError(
+            f"Expected one fresh {component} capture, got {len(fresh_capture)}."
+        )
+
+    fresh_component = fresh_capture[0][0][positions_idx]
+    capture_diff = fresh_component - target
+    capture_l2 = torch.linalg.vector_norm(
+        capture_diff,
+        dim=-1,
+    )
+    capture_metrics = {
+        "max_abs": float(capture_diff.abs().max().item()),
+        "mean_abs": float(capture_diff.abs().mean().item()),
+        "l2_mean": float(capture_l2.mean().item()),
+    }
+    print(
+        f"    stored_capture_vs_fresh: "
+        f"max_abs={capture_metrics['max_abs']:.6f} "
+        f"mean_abs={capture_metrics['mean_abs']:.6f} "
+        f"l2_mean={capture_metrics['l2_mean']:.6f}"
+    )
+
+    del fresh_outputs, fresh_capture
+
     exact_injector = ComponentInjector(module, positions, target)
     try:
         with torch.inference_mode():
@@ -508,6 +553,7 @@ def evaluate_probe(
         "evaluated_pairs": len(positions_idx),
         "representation": prediction_metrics,
         "repeatability_control": repeat_metrics,
+        "stored_capture_vs_fresh": capture_metrics,
         "exact_injection_control": exact_metrics,
         "predicted_component_behavior": learned_metrics,
         "zero_component_behavior": zero_metrics,
