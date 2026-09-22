@@ -229,7 +229,9 @@ def collect_trace(
     top_probs = torch.softmax(top_values, dim=-1).cpu()
 
     input_ids = full_ids[0].cpu()
-    del logits, states[36], full_ids, output, inputs
+    # Keep H36 in the trace: later relations (H35->H36 and H30->H36)
+    # need the captured final decoder-layer state. The state is already on CPU.
+    del logits, full_ids, output, inputs
     torch.cuda.empty_cache()
 
     predicted = extract_predicted(baseline_text)
