@@ -776,6 +776,46 @@ def summarize(
     return result
 
 
+def summarize_sublayers(
+    question_results: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    values_by_layer: dict[int, dict[str, list[float]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    observations: dict[int, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
+
+    for question in question_results:
+        for step_record in question["sublayer_records"]:
+            for layer_text, kinds in step_record["layers"].items():
+                layer = int(layer_text)
+                for kind, metrics in kinds.items():
+                    observations[layer][kind] += 1
+                    for key, value in metrics.items():
+                        if isinstance(value, (int, float)) and not isinstance(
+                            value, bool
+                        ):
+                            values_by_layer[layer][
+                                f"{kind}_{key}"
+                            ].append(float(value))
+
+    result: dict[str, dict[str, Any]] = {}
+    for layer, metrics in sorted(values_by_layer.items()):
+        result[str(layer)] = {
+            "layer": layer,
+            "observations": dict(
+                sorted(observations[layer].items())
+            ),
+            **{
+                f"{key}_mean": mean(values)
+                for key, values in sorted(metrics.items())
+            },
+        }
+
+    return result
+
+
 def write_jsonl(
     path: Path,
     rows: list[dict[str, Any]],
@@ -1018,7 +1058,7 @@ def main() -> int:
     )
     (args.output / "sublayer_summary.json").write_text(
         json.dumps(
-            summarize(results, "sublayer_records"),
+            summarize_sublayers(results),
             indent=2,
             ensure_ascii=False,
         ),
@@ -1032,6 +1072,12 @@ def main() -> int:
         args.output / "layer_metrics.jsonl",
         all_layers,
     )
+    sublayer_summary = summarize_sublayers(results)
+    if all_sublayers and not sublayer_summary:
+        raise RuntimeError(
+            "Sublayer records were collected but the sublayer summary is empty."
+        )
+
     write_jsonl(
         args.output / "sublayer_metrics.jsonl",
         all_sublayers,
