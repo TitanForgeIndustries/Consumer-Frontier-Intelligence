@@ -1,15 +1,11 @@
-"""CFI EXP-0009N: early-exit generalization with matched baselines.
+"""CFI EXP-0009N: anchored early-exit transition.
 
-Validates the EXP-0009L anchored early-exit idea on a larger split while keeping
-all evaluation conditions matched on the same generated traces.
+Instead of learning a new vocabulary head from scratch, reuse the base model's
+existing final RMSNorm and LM head. A compact residual adapter is learned to
+modify H35 before that existing output stack.
 
-Compares:
-1. full model oracle
-2. raw H35 direct exit through existing final norm + LM head
-3. learned bounded residual H35 exit
-4. functional whole-L36 skip
-
-Behavioral diagnostic only. No runtime speedup claim.
+This directly tests whether most of L36's behavior can be compressed into a
+small transition rather than reconstructed as a full hidden state.
 """
 
 from __future__ import annotations
@@ -169,7 +165,6 @@ def capture_trace(
                 attention_mask=torch.ones_like(full_ids),
                 use_cache=False,
             )
-        torch.cuda.synchronize()
     finally:
         handle.remove()
 
@@ -223,6 +218,8 @@ def capture_trace(
 
 
 class ResidualTransition(nn.Module):
+    """Compact H35 residual that feeds the model's existing final output stack."""
+
     def __init__(
         self,
         hidden_size: int,
@@ -236,7 +233,6 @@ class ResidualTransition(nn.Module):
         self.up = nn.Linear(bottleneck, hidden_size)
         self.max_update_ratio = max_update_ratio
 
-        # Identity at initialization: exact raw-H35 exit baseline.
         nn.init.zeros_(self.up.weight)
         nn.init.zeros_(self.up.bias)
 
@@ -249,22 +245,16 @@ class ResidualTransition(nn.Module):
         return source + update
 
 
-def final_stack(model: Any, hidden_cpu: torch.Tensor) -> torch.Tensor:
-    if hidden_cpu.ndim != 2:
-        raise RuntimeError(
-            f"Expected [positions, hidden] CPU tensor, got {tuple(hidden_cpu.shape)}"
-        )
-
-    norm = model.model.norm
+def base_exit_logits(model: Any, hidden: torch.Tensor) -> torch.Tensor:
+    """Run H35 through the established final normalization and LM head."""
+    model_norm = model.model.norm
     lm_head = model.lm_head
-    hidden = hidden_cpu.to(
-        device=norm.weight.device,
-        dtype=norm.weight.dtype,
-    )
-    with torch.inference_mode():
-        logits = lm_head(norm(hidden))
-    torch.cuda.synchronize()
-    return logits.detach().float().cpu().contiguous()
+
+    dtype = model_norm.weight.dtype
+    x = hidden.to(device=model_norm.weight.device, dtype=dtype)
+    x = model_norm(x)
+    logits = lm_head(x)
+    return logits.float()
 
 
 def distribution_metrics(
@@ -272,15 +262,9 @@ def distribution_metrics(
     candidate: torch.Tensor,
     target_ids: torch.Tensor,
 ) -> dict[str, float]:
-    oracle = oracle.detach().float().cpu().contiguous()
-    candidate = candidate.detach().float().cpu().contiguous()
-    target = target_ids.detach().long().cpu().unsqueeze(-1)
-
-    if oracle.shape != candidate.shape:
-        raise RuntimeError(
-            f"Distribution shape mismatch: oracle={tuple(oracle.shape)} "
-            f"candidate={tuple(candidate.shape)}"
-        )
+    oracle = oracle.float()
+    candidate = candidate.float()
+    target = target_ids.long().unsqueeze(-1)
 
     oracle_logp = F.log_softmax(oracle, dim=-1)
     candidate_logp = F.log_softmax(candidate, dim=-1)
@@ -311,43 +295,18 @@ def distribution_metrics(
     }
 
 
-class WholeLayerSkip:
-    def __init__(self, layer: Any) -> None:
-        self.handle = layer.register_forward_hook(self.hook)
-
-    def hook(self, _module: Any, inputs: Any, output: Any) -> Any:
-        hidden = inputs[0]
-
-        if torch.is_tensor(output):
-            return hidden.clone()
-
-        if isinstance(output, tuple):
-            values = list(output)
-            values[0] = hidden.clone()
-            return tuple(values)
-
-        if isinstance(output, list):
-            values = list(output)
-            values[0] = hidden.clone()
-            return values
-
-        raise TypeError(f"Unexpected layer output: {type(output).__name__}")
-
-    def remove(self) -> None:
-        self.handle.remove()
-
-
 def train_transition(
     model: Any,
     traces: list[Trace],
     args: argparse.Namespace,
+    device: torch.device,
 ) -> tuple[ResidualTransition, dict[str, Any]]:
     hidden_size = traces[0].h35.shape[-1]
     transition = ResidualTransition(
-        hidden_size,
-        args.bottleneck,
-        args.max_update_ratio,
-    ).to(device="cuda:0", dtype=torch.float32)
+        hidden_size=hidden_size,
+        bottleneck=args.bottleneck,
+        max_update_ratio=args.max_update_ratio,
+    ).to(device=device, dtype=torch.float32)
 
     for parameter in model.parameters():
         parameter.requires_grad_(False)
@@ -366,36 +325,25 @@ def train_transition(
         total = 0.0
 
         for trace in traces:
-            pos = trace.train_positions
-            source = trace.h35[pos].to("cuda:0")
-            teacher_log_probs = trace.teacher_log_probs.to("cuda:0")
+            positions_idx = torch.arange(trace.train_positions.numel())
+            positions = trace.train_positions[positions_idx]
+            source = trace.h35[positions].to(device)
 
             predicted_state = transition(source)
-            predicted_logits = final_stack(model, predicted_state.detach().float().cpu())
-
-            # Do not build a second full model graph. This initial N implementation
-            # trains the compact transition through the frozen output stack only.
-            # Gradient through the quantized output stack is intentionally omitted.
-            # Therefore the loss below trains the transition indirectly only through
-            # a differentiable local surrogate and is not used as a causal claim.
-            #
-            # For this validation experiment, use representation-free regression
-            # to teacher logits as a proxy target instead.
-            with torch.inference_mode():
-                teacher_logits = torch.stack(
-                    [trace.teacher_log_probs[i].float().to("cuda:0")
-                     for i in range(teacher_log_probs.shape[0])],
-                    dim=0,
-                ).cpu()
+            predicted_logits = base_exit_logits(model, predicted_state)
+            teacher_log_probs = trace.teacher_log_probs[positions_idx].to(device)
 
             student_logp = F.log_softmax(predicted_logits, dim=-1)
-            target_logp = teacher_logits.to(student_logp.device)
-            loss = F.mse_loss(student_logp, target_logp)
+            teacher_probs = teacher_log_probs.exp()
+            loss = (
+                teacher_probs * (teacher_log_probs - student_logp)
+            ).sum(dim=-1).mean()
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(transition.parameters(), 1.0)
             optimizer.step()
+
             total += float(loss.item())
 
         mean_loss = total / max(len(traces), 1)
@@ -410,6 +358,112 @@ def train_transition(
         "max_update_ratio": args.max_update_ratio,
         "parameter_count": sum(p.numel() for p in transition.parameters()),
         "history": history,
+    }
+
+
+class WholeLayerSkip:
+    """Replace the complete L36 output with its input H35."""
+    def __init__(self, layer: Any) -> None:
+        self.handle = layer.register_forward_hook(self.hook)
+
+    def hook(self, _module: Any, inputs: Any, output: Any) -> Any:
+        hidden = inputs[0]
+        if torch.is_tensor(output):
+            return hidden.clone()
+        if isinstance(output, tuple):
+            values = list(output)
+            values[0] = hidden.clone()
+            return tuple(values)
+        if isinstance(output, list):
+            values = list(output)
+            values[0] = hidden.clone()
+            return values
+        raise TypeError(f"Unexpected layer output: {type(output).__name__}")
+
+    def remove(self) -> None:
+        self.handle.remove()
+
+
+def evaluate(
+    model: Any,
+    transition: ResidualTransition,
+    trace: Trace,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    indices = torch.arange(trace.positions.numel())
+    if args.max_eval_tokens > 0 and indices.numel() > args.max_eval_tokens:
+        keep = torch.linspace(
+            0,
+            indices.numel() - 1,
+            steps=args.max_eval_tokens,
+        ).round().long()
+        indices = indices[keep]
+
+    positions = trace.positions[indices]
+    next_ids = trace.input_ids[positions + 1]
+
+    # The H35 source must use the same absolute sequence positions as the
+    # oracle logits. Using the local 0..N-1 evaluation indices here would feed
+    # the transition the wrong hidden states whenever the prompt has a prefix.
+    source = trace.h35[positions]
+
+    with torch.inference_mode():
+        oracle = model(
+            input_ids=trace.input_ids.unsqueeze(0).to("cuda:0"),
+            attention_mask=torch.ones(
+                (1, trace.input_ids.shape[0]),
+                dtype=torch.long,
+                device="cuda:0",
+            ),
+            use_cache=False,
+        ).logits[0, positions.to("cuda:0")].float().cpu()
+
+        base = base_exit_logits(model, source.to("cuda:0")).cpu()
+        transition.eval()
+        adapted_state = transition(source.to("cuda:0"))
+        adapted = base_exit_logits(model, adapted_state).cpu()
+
+    skip = WholeLayerSkip(model.model.layers[35])
+    try:
+        with torch.inference_mode():
+            skip_logits = model(
+                input_ids=trace.input_ids.unsqueeze(0).to("cuda:0"),
+                attention_mask=torch.ones(
+                    (1, trace.input_ids.shape[0]),
+                    dtype=torch.long,
+                    device="cuda:0",
+                ),
+                use_cache=False,
+            ).logits[0, positions.to("cuda:0")].float().cpu()
+    finally:
+        skip.remove()
+
+    # Sanity invariant: direct H35 exit must be the same boundary as a
+    # functional L36 skip. This keeps future evaluation changes from silently
+    # reintroducing a position-alignment error.
+    base_metrics = distribution_metrics(oracle, base, next_ids)
+    adapted_metrics = distribution_metrics(oracle, adapted, next_ids)
+    skip_metrics = distribution_metrics(oracle, skip_logits, next_ids)
+
+    source_rms = source.square().mean(dim=-1).sqrt().clamp_min(1e-8)
+    update_ratio = (
+        torch.linalg.vector_norm(
+            adapted_state.float().cpu() - source,
+            dim=-1,
+        )
+        / (
+            source_rms
+            * source.shape[-1] ** 0.5
+        )
+    )
+
+    return {
+        "question_index": trace.index,
+        "evaluated_positions": int(indices.numel()),
+        "base_h35_exit_behavior": base_metrics,
+        "adapted_exit_behavior": adapted_metrics,
+        "whole_layer36_skip_behavior": skip_metrics,
+        "adapted_state_update_ratio_mean": float(update_ratio.mean().item()),
     }
 
 
@@ -449,13 +503,113 @@ def main() -> int:
     train_traces = traces[: args.train_questions]
     eval_traces = traces[args.train_questions :]
 
-    # IMPORTANT: this implementation trains through a detached final stack,
-    # which cannot propagate gradient into the transition. Refuse rather than
-    # silently produce a non-learning experiment.
-    raise RuntimeError(
-        "EXP-0009N implementation scaffold requires a differentiable frozen "
-        "output stack before training. Do not run this scaffold yet."
+    print("\n=== train anchored residual transition ===")
+    transition, training = train_transition(
+        model,
+        train_traces,
+        args,
+        torch.device("cuda:0"),
     )
+
+    results = []
+    for trace in eval_traces:
+        print(f"  evaluating held-out question {trace.index}...")
+        result = evaluate(model, transition, trace, args)
+        results.append(result)
+
+        b = result["base_h35_exit_behavior"]
+        a = result["adapted_exit_behavior"]
+        print(
+            f"    base_H35_exit: KL={b['kl_oracle_to_candidate_mean']:.4f} "
+            f"top1={b['top1_agreement']:.4f} "
+            f"target_ratio={b['target_probability_ratio_mean']:.4f}"
+        )
+        s = result["whole_layer36_skip_behavior"]
+        print(
+            f"    adapted_exit: KL={a['kl_oracle_to_candidate_mean']:.4f} "
+            f"top1={a['top1_agreement']:.4f} "
+            f"target_ratio={a['target_probability_ratio_mean']:.4f} "
+            f"update_ratio={result['adapted_state_update_ratio_mean']:.4f}"
+        )
+        print(
+            f"    whole_L36_skip: KL={s['kl_oracle_to_candidate_mean']:.4f} "
+            f"top1={s['top1_agreement']:.4f} "
+            f"target_ratio={s['target_probability_ratio_mean']:.4f}"
+        )
+
+    def mean_metrics(key: str) -> dict[str, float]:
+        subset = [r[key] for r in results]
+        return {
+            metric: round(sum(item[metric] for item in subset) / len(subset), 8)
+            for metric in (
+                "top1_agreement",
+                "target_probability_ratio_mean",
+                "target_log_probability_delta_mean",
+                "kl_oracle_to_candidate_mean",
+                "logit_l2_mean",
+            )
+        }
+
+    summary = {
+        "schema_version": 1,
+        "experiment": "EXP-0009N",
+        "title": "Anchored Early-Exit Transition",
+        "status": "completed",
+        "model_path": str(args.model),
+        "dataset_path": str(args.dataset),
+        "questions": len(traces),
+        "train_questions": len(train_traces),
+        "eval_questions": len(eval_traces),
+        "config": {
+            "max_new_tokens": args.max_new_tokens,
+            "seed_base": args.seed_base,
+            "temperature": args.temperature,
+            "top_p": args.top_p,
+            "top_k": args.top_k,
+            "max_train_positions": args.max_train_positions,
+            "max_eval_tokens": args.max_eval_tokens,
+            "bottleneck": args.bottleneck,
+            "max_update_ratio": args.max_update_ratio,
+            "learning_rate": args.learning_rate,
+            "weight_decay": args.weight_decay,
+            "epochs": args.epochs,
+        },
+        "baseline": {
+            "accuracy": round(
+                sum(t.baseline_correct for t in traces) / len(traces),
+                8,
+            ),
+            "mean_generation_seconds": round(
+                sum(t.baseline_seconds for t in traces) / len(traces),
+                8,
+            ),
+            "mean_generated_tokens": round(
+                sum(t.generated_tokens for t in traces) / len(traces),
+                8,
+            ),
+        },
+        "training": training,
+        "base_h35_exit_mean": mean_metrics("base_h35_exit_behavior") if results else {},
+        "adapted_exit_mean": mean_metrics("adapted_exit_behavior") if results else {},
+        "whole_layer36_skip_mean": mean_metrics("whole_layer36_skip_behavior") if results else {},
+        "results": results,
+    }
+
+    with (args.output / "summary.json").open("w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+    with (args.output / "results.jsonl").open("w", encoding="utf-8") as f:
+        for result in results:
+            f.write(json.dumps(result) + "\n")
+
+    print("\n=== EXP-0009N summary ===")
+    print(json.dumps({
+        "base_h35_exit_mean": summary["base_h35_exit_mean"],
+        "adapted_exit_mean": summary["adapted_exit_mean"],
+        "whole_layer36_skip_mean": summary["whole_layer36_skip_mean"],
+        "training": training,
+    }, indent=2))
+    print(f"Results: {args.output}")
+    return 0
 
 
 if __name__ == "__main__":
