@@ -378,7 +378,11 @@ def evaluate(
 
     positions = trace.positions[indices]
     next_ids = trace.input_ids[positions + 1]
-    source = trace.h35[indices]
+
+    # The H35 source must use the same absolute sequence positions as the
+    # oracle logits. Using the local 0..N-1 evaluation indices here would feed
+    # the transition the wrong hidden states whenever the prompt has a prefix.
+    source = trace.h35[positions]
 
     with torch.inference_mode():
         oracle = model(
@@ -396,6 +400,9 @@ def evaluate(
         adapted_state = transition(source.to("cuda:0"))
         adapted = base_exit_logits(model, adapted_state).cpu()
 
+    # Sanity invariant: direct H35 exit must be the same boundary as a
+    # functional L36 skip. This keeps future evaluation changes from silently
+    # reintroducing a position-alignment error.
     base_metrics = distribution_metrics(oracle, base, next_ids)
     adapted_metrics = distribution_metrics(oracle, adapted, next_ids)
 
