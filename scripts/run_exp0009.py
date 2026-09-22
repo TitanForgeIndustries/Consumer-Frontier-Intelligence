@@ -447,6 +447,16 @@ def evaluate(
     exact_metrics = compare_logits(
         oracle, exact_candidate, trace.input_ids[positions + 1]
     )
+    if (
+        exact_metrics["top1_agreement"] < 0.999999
+        or exact_metrics["kl_oracle_to_candidate_mean"] > 1e-5
+    ):
+        raise RuntimeError(
+            "Exact-state injection control failed: "
+            f"top1={exact_metrics['top1_agreement']:.6f}, "
+            f"KL={exact_metrics['kl_oracle_to_candidate_mean']:.8f}. "
+            "Do not interpret predictor metrics until injection semantics are fixed."
+        )
 
     predicted_injector = Injector(model, target_layer, positions, pred_states)
     try:
