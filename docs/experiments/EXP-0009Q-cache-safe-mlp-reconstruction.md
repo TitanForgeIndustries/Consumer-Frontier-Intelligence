@@ -171,3 +171,25 @@ The helper import is now restored from `run_exp0009n.py`.
 No experiment logic or model behavior was changed.
 
 This run is also recorded as an implementation failure, not a scientific result.
+
+
+### Third Implementation Failure and Fix
+
+The next corrected run successfully reached held-out Q8 teacher-forced evaluation:
+
+```
+MLP zero: KL=0.0967 top1=0.9297
+MLP predicted: KL=0.0853 top1=0.9375
+```
+
+It then stopped when entering the runtime MLP-zero control with:
+
+```
+StopIteration
+```
+
+The cause was that the parameterless `ZeroMLP` control was passed through a generic wrapper that attempted to infer its dtype by reading its first parameter. Because the zero control intentionally has no parameters, that lookup failed.
+
+The wrapper now falls back to the incoming hidden-state dtype when the replacement module has no parameters.
+
+The teacher-forced values above are recorded as a partial diagnostic from the run, but the run is not treated as a complete scientific result because runtime evaluation did not finish.
