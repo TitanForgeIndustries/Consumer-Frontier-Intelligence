@@ -4,10 +4,9 @@ EXP-0009C showed that MSE/cosine hidden-state reconstruction can improve
 geometric state similarity while making downstream behavior worse than simple
 source-state copying.
 
-EXP-0009E changes the training objective. The predictor starts as identity-plus-
-residual and is trained primarily against a frozen downstream teacher using
-its top-k next-token distribution. Hidden-state losses remain small auxiliary
-terms.
+EXP-0009E replaces the top-k-only behavioral objective with full-vocabulary
+teacher KL and explicitly constrains the learned residual around the source-state
+copy baseline. Hidden-state losses are disabled by default and remain optional diagnostics.
 
 This is still a teacher-forced substitution experiment. It does not claim a
 hardware speedup.
@@ -38,7 +37,7 @@ from run_exp0008 import (
 
 
 DEFAULT_OUTPUT = Path(
-    r"E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009D-Behavioral-Latent-Predictor"
+    r"E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009E-Copy-Anchored-Full-Behavior"
 )
 
 RELATIONS = {
@@ -91,8 +90,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--bottleneck", type=int, default=256)
     p.add_argument("--learning-rate", type=float, default=5e-4)
     p.add_argument("--weight-decay", type=float, default=1e-5)
-    p.add_argument("--state-cosine-weight", type=float, default=0.05)
-    p.add_argument("--state-mse-weight", type=float, default=0.01)
+    p.add_argument("--state-cosine-weight", type=float, default=0.0)
+    p.add_argument("--state-mse-weight", type=float, default=0.0)
     p.add_argument(
         "--max-eval-tokens",
         type=int,
@@ -413,8 +412,6 @@ def train_predictor(
             source = trace.states[source_layer][positions_idx]
             target = trace.states[target_layer][positions_idx]
 
-            teacher_ids = trace.teacher_top_ids[positions_idx]
-            teacher_probs = trace.teacher_top_probs[positions_idx]
             teacher_log_probs = trace.teacher_log_probs[positions_idx]
 
             source_gpu = source.to(device)
