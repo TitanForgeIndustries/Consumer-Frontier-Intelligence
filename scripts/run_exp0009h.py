@@ -471,7 +471,7 @@ def evaluate_probe(
             f"Expected one fresh {component} capture, got {len(fresh_capture)}."
         )
 
-    fresh_component = fresh_capture[0][0][positions_idx]
+    fresh_component = fresh_capture[0][0][positions]
     capture_diff = fresh_component - target
     capture_l2 = torch.linalg.vector_norm(
         capture_diff,
