@@ -211,7 +211,7 @@ def collect_trace(
     h35 = hidden_states[35][0].float().cpu()
     # H36 is captured directly from decoder layer 36 output, before Qwen3's
     # final model RMSNorm. This is the same boundary used by state injection.
-    h36 = h36_capture[0]
+    h36 = h36_capture[0][0]
     # Qwen exposes the input embedding representation as hidden_states[0].
     # Reuse it instead of calling the embedding module again on an inference
     # tensor returned by generate(), which can trigger autograd/inference-mode
