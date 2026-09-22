@@ -133,3 +133,24 @@ python scripts/run_exp0009q.py --questions 10 --train-questions 7 --max-new-toke
 ## Status
 
 Implementation committed. Runtime measurements pending.
+
+
+## First Run Failure and Fix
+
+The first execution completed all ten greedy trace captures and all 16 training epochs, then stopped during teacher-forced evaluation of held-out question 8.
+
+Failure:
+
+```
+RuntimeError: mat1 and mat2 must have the same dtype, but got Float and BFloat16
+```
+
+The cause was a mixed-dtype evaluation path: the runtime copy of the learned MLP predictor was BF16, while the teacher-forced source tensor was explicitly cast to FP32 before entering the predictor.
+
+The evaluation path was corrected to cast the predictor input to the predictor parameter dtype and cast the predicted MLP residual back to FP32 before combining it with the FP32 residual state.
+
+No model weights, training objective, or runtime replacement architecture were changed.
+
+The failed run is recorded as an implementation failure, not a scientific result.
+
+The transition training itself completed successfully before the failure. The final training loss in the interrupted run was 0.058531.
