@@ -260,6 +260,41 @@ class Probe(nn.Module):
         return self.up(self.act(self.down(self.norm(source))))
 
 
+class SameForwardComponentReplay:
+    """Capture a component and replay the same values within that forward."""
+
+    def __init__(self, module: Any, positions: torch.Tensor) -> None:
+        self.positions = positions.to("cuda:0")
+        self.handle = module.register_forward_hook(self.hook)
+
+    def hook(self, _module: Any, _inputs: Any, output: Any) -> Any:
+        def replace(tensor: torch.Tensor) -> torch.Tensor:
+            selected = tensor[:, self.positions, :].clone()
+            cloned = tensor.clone()
+            cloned[:, self.positions, :] = selected
+            return cloned
+
+        if torch.is_tensor(output):
+            return replace(output)
+
+        if isinstance(output, tuple):
+            values = list(output)
+            values[0] = replace(values[0])
+            return tuple(values)
+
+        if isinstance(output, list):
+            values = list(output)
+            values[0] = replace(values[0])
+            return values
+
+        raise TypeError(
+            f"Unexpected component output: {type(output).__name__}"
+        )
+
+    def remove(self) -> None:
+        self.handle.remove()
+
+
 class ComponentInjector:
     def __init__(
         self,
@@ -536,12 +571,11 @@ def evaluate_probe(
 
     del fresh_outputs, fresh_capture
 
-    # Use the fresh capture as the semantic exact-component reference. The
-    # stored trace remains the training target, while this control answers the
-    # narrower question: can the exact component produced by this forward be
-    # replayed through the same module without changing model behavior?
-    exact_target = fresh_component
-    exact_injector = ComponentInjector(module, positions, exact_target)
+    # Same-forward replay is the semantic exact-component control. It
+    # captures the component and replaces the selected positions with the exact
+    # values from that same forward, so internal cross-forward decomposition
+    # drift cannot invalidate the control.
+    exact_injector = SameForwardComponentReplay(module, positions)
     try:
         with torch.inference_mode():
             exact = model(
