@@ -718,6 +718,18 @@ def evaluate(
                     target_eval,
                 ).item()
             ),
+            "source_update_ratio_mean": float(
+                (
+                    torch.linalg.vector_norm(
+                        predicted.cpu() - source_eval,
+                        dim=-1,
+                    )
+                    / (
+                        source_eval.square().mean(dim=-1).sqrt().clamp_min(1e-8)
+                        * math.sqrt(predicted.shape[-1])
+                    )
+                ).mean().item()
+            ),
         }
     )
 
@@ -899,6 +911,7 @@ def main() -> int:
         "state_cosine_mean",
         "state_relative_error_mean",
         "state_mse_mean",
+        "source_update_ratio_mean",
         "top1_agreement",
         "target_probability_ratio_mean",
         "target_log_probability_delta_mean",
