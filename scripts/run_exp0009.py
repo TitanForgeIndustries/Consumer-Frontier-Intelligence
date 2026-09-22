@@ -357,7 +357,8 @@ class Injector:
         if isinstance(output, list):
             values = list(output)
             values[0] = values[0].clone()
-            values[0][:, self.positions, :] = self.states
+            states = self.states.to(device=values[0].device, dtype=values[0].dtype)
+            values[0][:, self.positions, :] = states
             return values
 
         raise TypeError(f"Unexpected decoder layer output: {type(output).__name__}")
