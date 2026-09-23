@@ -1,0 +1,12 @@
+# Local Python environment
+.venv/
+
+# Python bytecode and local package metadata
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Local tool/runtime caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
