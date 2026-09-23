@@ -132,7 +132,9 @@ python scripts/run_exp0009q.py --questions 10 --train-questions 7 --max-new-toke
 
 ## Status
 
-Implementation committed. Runtime measurements pending.
+Completed on the established RTX 3070 setup. Two post-fix runs produced the
+same held-out teacher-forced and generated-token results. The measured runtime
+ratios varied; see the completed results and decision below.
 
 
 ## First Run Failure and Fix
@@ -193,3 +195,86 @@ The cause was that the parameterless `ZeroMLP` control was passed through a gene
 The wrapper now falls back to the incoming hidden-state dtype when the replacement module has no parameters.
 
 The teacher-forced values above are recorded as a partial diagnostic from the run, but the run is not treated as a complete scientific result because runtime evaluation did not finish.
+
+## Completed Results (2026-09-22, local time)
+
+The corrected script completed twice from fresh Python processes: an existing
+post-fix run in
+`E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009Q-Cache-Safe-MLP-Reconstruction`
+and a fresh rerun in
+`E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009Q-Cache-Safe-MLP-Reconstruction-rerun-20260922`.
+Each directory retains its own `summary.json` and FP32 auxiliary-predictor
+checkpoint; the rerun also retains `run.log`. The earlier completed result was
+not overwritten. Both summaries report `status=completed`, ten matched greedy
+traces, seven training questions, three held-out questions (8-10), 128 tokens,
+64 training positions per question, 16 epochs, two measured repeats per mode,
+and a 16-token warmup. The 658,048-parameter MLP predictor alone was trained;
+Qwen3-4B-Base remained frozen. Training mean loss was 0.123276 in epoch 1 and
+0.058531 in epoch 16, with a lower intermediate value; it was not monotonic.
+
+Held-out teacher-forced metrics were identical across the two completed runs:
+
+| Metric | Zero L36 MLP | Predicted L36 MLP |
+|---|---:|---:|
+| Mean KL to full-model teacher | 0.08565601 | **0.07878638** |
+| Mean top-1 agreement | 0.94791667 | **0.95052083** |
+| Mean target-token probability ratio | 1.01202110 | 1.01122487 |
+| Mean target log-probability delta | -0.02593932 | -0.02582835 |
+| Mean logit L2 distance | 5066.5073 | 4485.4642 |
+
+The predictor reduced KL by 8.02% relative to the zero-MLP control and raised
+top-1 agreement by 0.26 percentage points on these teacher-forced held-out
+traces (one additional matching top-1 position out of 384). The target-token
+probability ratio did not improve, and these numbers do not measure
+free-running stability.
+
+The runtime path temporarily replaces only `model.model.layers[35].mlp.forward`.
+It physically omits the original L36 MLP computation while continuing to run
+genuine L36 attention and its KV-cache updates. Each mode generated 128 tokens
+per question. The measured mean seconds per question were:
+
+| Run | Question | Full L36 | Zero MLP | Predicted MLP | Zero speedup | Predicted speedup |
+|---|---:|---:|---:|---:|---:|---:|
+| Existing completed run | 8 | 22.9057 | 23.2882 | 23.7779 | 0.9836x | 0.9633x |
+| Existing completed run | 9 | 13.6126 | 12.1143 | 12.4206 | 1.1237x | 1.0960x |
+| Existing completed run | 10 | 12.3075 | 12.8611 | 12.3208 | 0.9570x | 0.9989x |
+| Fresh rerun | 8 | 13.1543 | 11.4553 | 10.5375 | 1.1483x | 1.2483x |
+| Fresh rerun | 9 | 11.0418 | 10.9466 | 10.4581 | 1.0087x | 1.0558x |
+| Fresh rerun | 10 | 11.1871 | 13.5577 | 12.8541 | 0.8251x | 0.8703x |
+
+The script's arithmetic mean of per-question speedup ratios was 1.0214x for
+zero and 1.0194x for predicted in the existing run, versus 0.9941x for zero
+and 1.0582x for predicted in the fresh rerun. Per-question timing varied
+substantially, particularly for question 8, and question 10 regressed in the
+fresh rerun. With only three held-out questions, two repeats, and a fixed
+full/zero/predicted measurement order, these timings do not establish a
+reliable general speedup or a quality-preserving acceleration.
+Mean measured peak GPU allocation in the fresh rerun was 2.561 GiB for full
+and 2.560 GiB for each replacement mode; this is not a meaningful memory
+reduction at the recorded precision.
+
+Generated-token behavior was identical across completed runs:
+
+| Question | Zero agreement with full | Predicted agreement with full | First divergence: zero / predicted |
+|---|---:|---:|---:|
+| 8 | 9/128 (7.03%) | 10/128 (7.81%) | 10 / 10 |
+| 9 | 6/128 (4.69%) | 6/128 (4.69%) | 7 / 7 |
+| 10 | 12/128 (9.38%) | 22/128 (17.19%) | 11 / 10 |
+| Mean | 27/384 (7.03%) | 38/384 (9.90%) | — |
+
+The mean improvement of 2.86 percentage points over zeroing is small relative
+to the remaining sequence divergence. Retaining L36 attention and its cache
+did not make this compact MLP replacement interchangeable with full L36 during
+autoregressive generation. All full-model baseline generations in these
+128-token runs had `predicted=None` under the GSM8K answer parser, so this
+experiment does not establish an end-to-end question-accuracy comparison.
+
+## Q Decision
+
+**Closed for this configuration: local reconstruction signal, free-running
+behavioral failure for direct MLP replacement, and inconclusive runtime
+advantage.** The post-fix runs establish a completed result; the earlier
+three crashes remain implementation failures, not negative scientific runs.
+The result does not show that all cache-safe MLP replacements are impossible,
+nor does it justify claiming a useful quality-preserving speedup. Do not infer
+free-running quality from teacher-forced KL or enlarge the predictor blindly.
