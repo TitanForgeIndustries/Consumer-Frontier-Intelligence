@@ -3,6 +3,8 @@ Open research into making frontier-level AI practical on consumer hardware.
 
 Consumer Frontier Intelligence is an open-source research project investigating whether highly capable general-purpose artificial intelligence can be achieved with dramatically lower computational and hardware requirements than current large-scale approaches.
 
+Current research: [CFI program](docs/CFI-RESEARCH-PROGRAM.md), [v0 architecture](docs/CFI-V0-DESIGN.md), [EXP-0010 smoke](docs/experiments/EXP-0010-cfi-v0-smoke.md), and [EXP-0011 routing controls](docs/experiments/EXP-0011-route-collapse-capacity-control.md). The first original checkpoint runs without Qwen weights, but its tiny-corpus output is not useful language. Stronger balancing prevents route collapse; sparse execution remains slower and more memory-intensive than the same-active-width dense control.
+
 The long-term objective is ambitious:
 
 Develop an AI system capable of approaching frontier-model capabilities while remaining practical to run on ordinary consumer hardware.
