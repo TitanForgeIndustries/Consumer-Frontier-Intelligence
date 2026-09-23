@@ -4,6 +4,12 @@ This directory contains detailed records of individual research experiments.
 
 The repository includes an experiment logger under `src/cfi_experiment_logger/`. It stores each run as machine-readable JSON/JSONL, captures hardware telemetry, imports training metrics, records evaluations, and generates Markdown/CSV/Excel outputs.
 
+## Research records on `main`
+
+- [EXP-0007: Qwen3 computation and memory instrumentation](EXP-0007-instrumentation.md)
+- [EXP-0008: causal late-layer sublayer ablation](EXP-0008-causal-sublayer-ablation.md) and [results](EXP-0008-causal-sublayer-ablation-results.md)
+- [EXP-0009: predictive latent-state replacement](EXP-0009-predictive-latent-state.md)
+
 ## Record structure
 
 ```text
