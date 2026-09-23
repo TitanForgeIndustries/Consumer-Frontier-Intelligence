@@ -13,6 +13,7 @@ The repository includes an experiment logger under `src/cfi_experiment_logger/`.
 - [EXP-0009O: integrated early-exit runtime](EXP-0009O-integrated-early-exit-runtime.md)
 - [EXP-0009P: matched greedy trajectories](EXP-0009P-matched-greedy-trajectory.md)
 - [EXP-0009Q: cache-safe L36 MLP reconstruction](EXP-0009Q-cache-safe-mlp-reconstruction.md)
+- [EXP-0009R: scorable cache-safe evaluation](EXP-0009R-scorable-cache-safe-evaluation.md)
 
 ## Record structure
 
