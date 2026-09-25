@@ -57,18 +57,18 @@ unrun, not a negative result for the predictor.
 Run the baseline gate first from the repository root, with the experiment dependencies installed and the required Q checkpoint available:
 
 ```powershell
-$env:CFI_DATA_ROOT = Join-Path (Get-Location) ".cfi-data"
+if (-not $env:CFI_DATA_ROOT) { $env:CFI_DATA_ROOT = Join-Path (Get-Location) ".cfi-data" }
 $env:HF_HOME = Join-Path $env:CFI_DATA_ROOT "HuggingFace"
-python scripts/run_exp0009r.py --baseline-only --max-new-tokens 512 --output ".cfi-data/Results/CFI-Eval-0009R-Scoring-Gate"
+python scripts/run_exp0009r.py --baseline-only --max-new-tokens 512 --output (Join-Path $env:CFI_DATA_ROOT "Results/CFI-Eval-0009R-Scoring-Gate")
 ```
 
 Only after the gate summary reports `baseline_ready`, run the comparison
 from a fresh process and a different directory:
 
 ```powershell
-$env:CFI_DATA_ROOT = Join-Path (Get-Location) ".cfi-data"
+if (-not $env:CFI_DATA_ROOT) { $env:CFI_DATA_ROOT = Join-Path (Get-Location) ".cfi-data" }
 $env:HF_HOME = Join-Path $env:CFI_DATA_ROOT "HuggingFace"
-python scripts/run_exp0009r.py --max-new-tokens 512 --runtime-tokens 128 --warmup-tokens 16 --repeats 2 --output ".cfi-data/Results/CFI-Eval-0009R-Scorable-Cache-Safe-Evaluation"
+python scripts/run_exp0009r.py --max-new-tokens 512 --runtime-tokens 128 --warmup-tokens 16 --repeats 2 --output (Join-Path $env:CFI_DATA_ROOT "Results/CFI-Eval-0009R-Scorable-Cache-Safe-Evaluation")
 ```
 
 ## Completed results

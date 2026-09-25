@@ -118,7 +118,7 @@ Run from the CFI repository environment:
 
 PowerShell from the repository root (set `CFI_DATA_ROOT` to another local volume if needed):
 
-$env:CFI_DATA_ROOT = Join-Path (Get-Location) ".cfi-data"
+if (-not $env:CFI_DATA_ROOT) { $env:CFI_DATA_ROOT = Join-Path (Get-Location) ".cfi-data" }
 New-Item -ItemType Directory -Force (Join-Path $env:CFI_DATA_ROOT "Temp") | Out-Null
 $env:TEMP = Join-Path $env:CFI_DATA_ROOT "Temp"
 $env:TMP = $env:TEMP
