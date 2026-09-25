@@ -7,14 +7,11 @@ import json
 import math
 from collections import defaultdict
 from pathlib import Path
+from cfi_paths import data_path
 
 
-DEFAULT_INPUT = Path(
-    r"E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0007-Instrumentation\sublayer_metrics.jsonl"
-)
-DEFAULT_OUTPUT = Path(
-    r"E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0007-Instrumentation\sublayer_summary.json"
-)
+DEFAULT_INPUT = data_path("Results", "CFI-Eval-0007-Instrumentation", "sublayer_metrics.jsonl")
+DEFAULT_OUTPUT = data_path("Results", "CFI-Eval-0007-Instrumentation", "sublayer_summary.json")
 
 
 def parse_args() -> argparse.Namespace:

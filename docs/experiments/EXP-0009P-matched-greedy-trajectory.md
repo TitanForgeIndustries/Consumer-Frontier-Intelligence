@@ -113,12 +113,10 @@ No claim of production-level acceleration or general model acceleration is made.
 
 ## Run
 
-```powershell
-cd "E:\Titan Forge Industries\Consumer-Frontier-Intelligence"
-git switch exp-0009p-matched-greedy-trajectory
-git pull origin exp-0009p-matched-greedy-trajectory
+Run from the repository root with the experiment dependencies installed. This runner is included on `main`.
 
-python scripts/run_exp0009p.py --questions 10 --train-questions 7 --max-new-tokens 128 --epochs 16 --bottleneck 128 --repeats 2 --warmup-tokens 16 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009P-Matched-Greedy-Trajectory"
+```powershell
+python scripts/run_exp0009p.py --questions 10 --train-questions 7 --max-new-tokens 128 --epochs 16 --bottleneck 128 --repeats 2 --warmup-tokens 16 --output ".cfi-data/Results/CFI-Eval-0009P-Matched-Greedy-Trajectory"
 ```
 
 

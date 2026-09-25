@@ -70,7 +70,7 @@ An integrated decoder would need to stop after H35 and call the existing output 
 
 Run:
 
-    python scripts/run_exp0009l.py --questions 6 --train-questions 4 --max-new-tokens 128 --epochs 16 --bottleneck 128 --max-train-positions 64 --output "E:\\Titan Forge Industries\\CFI-Data\\Results\\CFI-Eval-0009L-Anchored-Early-Exit"
+    python scripts/run_exp0009l.py --questions 6 --train-questions 4 --max-new-tokens 128 --epochs 16 --bottleneck 128 --max-train-positions 64 --output ".cfi-data/Results/CFI-Eval-0009L-Anchored-Early-Exit"
 
 ## Decision rule
 

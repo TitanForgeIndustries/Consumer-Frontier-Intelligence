@@ -69,7 +69,7 @@ The missing information is not recoverable from H35 alone. A richer source repre
 
 Smoke command:
 
-    python scripts/run_exp0009h.py --questions 4 --train-questions 2 --max-new-tokens 128 --epochs 4 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009H-Sublayer-Predictability-Diagnostic"
+    python scripts/run_exp0009h.py --questions 4 --train-questions 2 --max-new-tokens 128 --epochs 4 --output ".cfi-data/Results/CFI-Eval-0009H-Sublayer-Predictability-Diagnostic"
 
 ## Important limits
 

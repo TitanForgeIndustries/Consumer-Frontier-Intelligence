@@ -20,6 +20,7 @@ import copy
 import json
 import time
 from pathlib import Path
+from cfi_paths import data_path
 from types import MethodType
 from typing import Any, Callable
 
@@ -39,9 +40,7 @@ from run_exp0009n import (
 )
 
 
-DEFAULT_OUTPUT = Path(
-    r"E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009O-Integrated-Early-Exit-Runtime"
-)
+DEFAULT_OUTPUT = data_path("Results", "CFI-Eval-0009O-Integrated-Early-Exit-Runtime")
 
 
 def parse_args() -> argparse.Namespace:

@@ -49,7 +49,7 @@ Captured objects:
 
 Run:
 
-    python scripts/run_exp0009j.py --questions 4 --max-new-tokens 128 --output "E:\\Titan Forge Industries\\CFI-Data\\Results\\CFI-Eval-0009J-Capture-Path-Control"
+    python scripts/run_exp0009j.py --questions 4 --max-new-tokens 128 --output ".cfi-data/Results/CFI-Eval-0009J-Capture-Path-Control"
 
 ## Limits
 

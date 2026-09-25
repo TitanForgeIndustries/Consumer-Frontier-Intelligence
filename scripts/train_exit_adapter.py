@@ -18,6 +18,7 @@ import math
 import threading
 import time
 from pathlib import Path
+from cfi_paths import data_path
 from typing import Any
 
 import torch
@@ -34,15 +35,9 @@ except ImportError:
     collect_hardware_snapshot = None
 
 
-DEFAULT_MODEL = Path(
-    r"E:\Titan Forge Industries\CFI-Data\HuggingFace\hub\models--Qwen--Qwen3-4B-Base\snapshots\906bfd4b4dc7f14ee4320094d8b41684abff8539"
-)
-DEFAULT_OUTPUT = Path(
-    r"E:\Titan Forge Industries\CFI-Data\Models\CFI-EXP-0003-EarlyExit-30"
-)
-DEFAULT_DATASET_CACHE = Path(
-    r"E:\Titan Forge Industries\CFI-Data\HuggingFace\datasets"
-)
+DEFAULT_MODEL = data_path("HuggingFace", "hub", "models--Qwen--Qwen3-4B-Base", "snapshots", "906bfd4b4dc7f14ee4320094d8b41684abff8539")
+DEFAULT_OUTPUT = data_path("Models", "CFI-EXP-0003-EarlyExit-30")
+DEFAULT_DATASET_CACHE = data_path("HuggingFace", "datasets")
 DEFAULT_DEPTH = 30
 DEFAULT_TRAIN_EXAMPLES = 512
 DEFAULT_MAX_LENGTH = 512

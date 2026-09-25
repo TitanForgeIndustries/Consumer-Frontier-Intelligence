@@ -188,7 +188,7 @@ The full first gate is:
 
 Default output:
 
-E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009B-Conditioned-Latent-State
+CFI_DATA_ROOT/Results/CFI-Eval-0009B-Conditioned-Latent-State
 
 Files:
 

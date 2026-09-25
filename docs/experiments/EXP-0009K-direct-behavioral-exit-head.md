@@ -73,7 +73,7 @@ A future integrated decoder would need to invoke the exit head directly after H3
 
 Run:
 
-    python scripts/run_exp0009k.py --questions 4 --train-questions 2 --max-new-tokens 128 --epochs 4 --bottleneck 256 --output "E:\\Titan Forge Industries\\CFI-Data\\Results\\CFI-Eval-0009K-Direct-Behavioral-Exit-Head"
+    python scripts/run_exp0009k.py --questions 4 --train-questions 2 --max-new-tokens 128 --epochs 4 --bottleneck 256 --output ".cfi-data/Results/CFI-Eval-0009K-Direct-Behavioral-Exit-Head"
 
 ## Decision rule
 

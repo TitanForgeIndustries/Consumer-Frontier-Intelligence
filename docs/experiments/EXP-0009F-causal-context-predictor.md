@@ -98,11 +98,11 @@ The key comparison is predictor versus copy.
 
 First run only H35 -> H36:
 
-    python scripts/run_exp0009f.py --questions 4 --train-questions 2 --relations h35_to_h36 --max-new-tokens 128 --epochs 4 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009F-Causal-Context-Predictor"
+    python scripts/run_exp0009f.py --questions 4 --train-questions 2 --relations h35_to_h36 --max-new-tokens 128 --epochs 4 --output ".cfi-data/Results/CFI-Eval-0009F-Causal-Context-Predictor"
 
 After the one-relation gate completes:
 
-    python scripts/run_exp0009f.py --questions 4 --train-questions 2 --max-new-tokens 128 --epochs 4 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009F-Causal-Context-Predictor"
+    python scripts/run_exp0009f.py --questions 4 --train-questions 2 --max-new-tokens 128 --epochs 4 --output ".cfi-data/Results/CFI-Eval-0009F-Causal-Context-Predictor"
 
 ## Interpretation
 
@@ -129,7 +129,7 @@ A positive result still requires autoregressive rollout and timing before becomi
 
 Command:
 
-    python scripts/run_exp0009f.py --questions 4 --train-questions 2 --relations h35_to_h36 --max-new-tokens 128 --epochs 4 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009F-Causal-Context-Predictor"
+    python scripts/run_exp0009f.py --questions 4 --train-questions 2 --relations h35_to_h36 --max-new-tokens 128 --epochs 4 --output ".cfi-data/Results/CFI-Eval-0009F-Causal-Context-Predictor"
 
 Exact-state injection passed:
 

@@ -122,12 +122,10 @@ This experiment does not establish whole-layer L36 skipping. It tests a cache-sa
 
 ## Run
 
-```powershell
-cd "E:\Titan Forge Industries\Consumer-Frontier-Intelligence"
-git switch exp-0009q-cache-safe-mlp-reconstruction
-git pull origin exp-0009q-cache-safe-mlp-reconstruction
+Run from the repository root with the experiment dependencies installed. This runner is included on `main`.
 
-python scripts/run_exp0009q.py --questions 10 --train-questions 7 --max-new-tokens 128 --epochs 16 --bottleneck 128 --repeats 2 --warmup-tokens 16 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009Q-Cache-Safe-MLP-Reconstruction"
+```powershell
+python scripts/run_exp0009q.py --questions 10 --train-questions 7 --max-new-tokens 128 --epochs 16 --bottleneck 128 --repeats 2 --warmup-tokens 16 --output ".cfi-data/Results/CFI-Eval-0009Q-Cache-Safe-MLP-Reconstruction"
 ```
 
 ## Status
@@ -200,9 +198,9 @@ The teacher-forced values above are recorded as a partial diagnostic from the ru
 
 The corrected script completed twice from fresh Python processes: an existing
 post-fix run in
-`E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009Q-Cache-Safe-MLP-Reconstruction`
+`CFI_DATA_ROOT/Results/CFI-Eval-0009Q-Cache-Safe-MLP-Reconstruction`
 and a fresh rerun in
-`E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009Q-Cache-Safe-MLP-Reconstruction-rerun-20260922`.
+`CFI_DATA_ROOT/Results/CFI-Eval-0009Q-Cache-Safe-MLP-Reconstruction-rerun-20260922`.
 Each directory retains its own `summary.json` and FP32 auxiliary-predictor
 checkpoint; the rerun also retains `run.log`. The earlier completed result was
 not overwritten. Both summaries report `status=completed`, ten matched greedy

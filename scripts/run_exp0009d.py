@@ -22,6 +22,7 @@ import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from cfi_paths import data_path
 from typing import Any
 
 import torch
@@ -37,9 +38,7 @@ from run_exp0008 import (
 )
 
 
-DEFAULT_OUTPUT = Path(
-    r"E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009D-Behavioral-Latent-Predictor"
-)
+DEFAULT_OUTPUT = data_path("Results", "CFI-Eval-0009D-Behavioral-Latent-Predictor")
 
 RELATIONS = {
     "h30_to_h35": (30, 35),

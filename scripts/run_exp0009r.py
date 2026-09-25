@@ -8,6 +8,7 @@ import json
 import time
 import traceback
 from pathlib import Path
+from cfi_paths import data_path
 from typing import Any
 
 import torch
@@ -24,12 +25,8 @@ from run_exp0009q import (
 )
 
 
-DEFAULT_CHECKPOINT = Path(
-    r"E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009Q-Cache-Safe-MLP-Reconstruction-rerun-20260922\mlp_transition_state_dict_fp32.pt"
-)
-DEFAULT_OUTPUT = Path(
-    r"E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009R-Scorable-Cache-Safe-Evaluation"
-)
+DEFAULT_CHECKPOINT = data_path("Results", "CFI-Eval-0009Q-Cache-Safe-MLP-Reconstruction-rerun-20260922", "mlp_transition_state_dict_fp32.pt")
+DEFAULT_OUTPUT = data_path("Results", "CFI-Eval-0009R-Scorable-Cache-Safe-Evaluation")
 MODES = ("full", "mlp_zero", "mlp_predicted")
 HELD_OUT_INDICES = (8, 9, 10)
 PREFIX_CAPS = (128, 256, 512)

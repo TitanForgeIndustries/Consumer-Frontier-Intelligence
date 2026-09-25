@@ -65,7 +65,7 @@ Metrics:
 
 Run:
 
-    python scripts/run_exp0009n.py --questions 10 --train-questions 7 --max-new-tokens 128 --epochs 16 --bottleneck 128 --max-train-positions 64 --output "E:\\Titan Forge Industries\\CFI-Data\\Results\\CFI-Eval-0009N-Early-Exit-Generalization"
+    python scripts/run_exp0009n.py --questions 10 --train-questions 7 --max-new-tokens 128 --epochs 16 --bottleneck 128 --max-train-positions 64 --output ".cfi-data/Results/CFI-Eval-0009N-Early-Exit-Generalization"
 
 ## Interpretation
 

@@ -38,7 +38,7 @@ with full L36 and a zero-MLP control at that horizon.
   timing avoids mistaking shorter divergent answers for speedup. Record peak
   CUDA allocation. No claim of quality-preserving acceleration follows from
   timing alone.
-- Both runs are fresh Python processes with separate E: output directories.
+- Both runs are fresh Python processes with separate local output directories.
   Never overwrite Q artifacts or the baseline gate's summary. Implementation
   exceptions are written to `implementation_failure.json`, distinct from
   scientific outcomes in `summary.json`.
@@ -54,29 +54,29 @@ unrun, not a negative result for the predictor.
 
 ## Commands
 
-Run the baseline gate first:
+Run the baseline gate first from the repository root, with the experiment dependencies installed and the required Q checkpoint available:
 
 ```powershell
-cd "E:\Titan Forge Industries\Consumer-Frontier-Intelligence"
-$env:HF_HOME = "E:\Titan Forge Industries\CFI-Data\HuggingFace"
-.\.venv\Scripts\python.exe scripts\run_exp0009r.py --baseline-only --max-new-tokens 512 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009R-Scoring-Gate"
+$env:CFI_DATA_ROOT = Join-Path (Get-Location) ".cfi-data"
+$env:HF_HOME = Join-Path $env:CFI_DATA_ROOT "HuggingFace"
+python scripts/run_exp0009r.py --baseline-only --max-new-tokens 512 --output ".cfi-data/Results/CFI-Eval-0009R-Scoring-Gate"
 ```
 
 Only after the gate summary reports `baseline_ready`, run the comparison
 from a fresh process and a different directory:
 
 ```powershell
-cd "E:\Titan Forge Industries\Consumer-Frontier-Intelligence"
-$env:HF_HOME = "E:\Titan Forge Industries\CFI-Data\HuggingFace"
-.\.venv\Scripts\python.exe scripts\run_exp0009r.py --max-new-tokens 512 --runtime-tokens 128 --warmup-tokens 16 --repeats 2 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009R-Scorable-Cache-Safe-Evaluation"
+$env:CFI_DATA_ROOT = Join-Path (Get-Location) ".cfi-data"
+$env:HF_HOME = Join-Path $env:CFI_DATA_ROOT "HuggingFace"
+python scripts/run_exp0009r.py --max-new-tokens 512 --runtime-tokens 128 --warmup-tokens 16 --repeats 2 --output ".cfi-data/Results/CFI-Eval-0009R-Scorable-Cache-Safe-Evaluation"
 ```
 
 ## Completed results
 
 The baseline gate summary is in
-`E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009R-Scoring-Gate`.
+`CFI_DATA_ROOT/Results/CFI-Eval-0009R-Scoring-Gate`.
 The separate comparison summary is in
-`E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009R-Scorable-Cache-Safe-Evaluation`.
+`CFI_DATA_ROOT/Results/CFI-Eval-0009R-Scorable-Cache-Safe-Evaluation`.
 Both retain complete generated text and token IDs; their corresponding
 `-run.log` files are adjacent to the result directories. The full-model token
 sequences were identical across the two fresh processes, as were the dataset

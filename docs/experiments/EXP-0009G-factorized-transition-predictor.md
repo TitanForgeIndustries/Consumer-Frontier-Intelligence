@@ -83,7 +83,7 @@ Second gate, only if the first shows useful signal:
 
 ## Smoke command
 
-    python scripts/run_exp0009g.py --questions 4 --train-questions 2 --relations h35_to_h36 --max-new-tokens 128 --epochs 4 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009G-Factorized-Transition-Predictor"
+    python scripts/run_exp0009g.py --questions 4 --train-questions 2 --relations h35_to_h36 --max-new-tokens 128 --epochs 4 --output ".cfi-data/Results/CFI-Eval-0009G-Factorized-Transition-Predictor"
 
 ## Controls
 
@@ -129,7 +129,7 @@ A positive teacher-forced result still requires autoregressive rollout and timin
 
 Command:
 
-    python scripts/run_exp0009g.py --questions 4 --train-questions 2 --relations h35_to_h36 --max-new-tokens 128 --epochs 4 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009G-Factorized-Transition-Predictor"
+    python scripts/run_exp0009g.py --questions 4 --train-questions 2 --relations h35_to_h36 --max-new-tokens 128 --epochs 4 --output ".cfi-data/Results/CFI-Eval-0009G-Factorized-Transition-Predictor"
 
 Exact-state injection passed:
 

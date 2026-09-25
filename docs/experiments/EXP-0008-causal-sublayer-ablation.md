@@ -143,7 +143,7 @@ The purpose is to identify which computations deserve the next round of approxim
 
 Default output:
 
-E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0008-Causal-Sublayer-Ablation
+CFI_DATA_ROOT/Results/CFI-Eval-0008-Causal-Sublayer-Ablation
 
 Files:
 

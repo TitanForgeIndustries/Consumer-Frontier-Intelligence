@@ -135,13 +135,10 @@ No claim of frontier-level capability, 4T parameter equivalence, or general mode
 
 ## Run
 
-```powershell
-cd "E:\Titan Forge Industries\Consumer-Frontier-Intelligence"
-.\.venv\Scripts\Activate.ps1
-git switch exp-0009o-integrated-early-exit-runtime
-git pull origin exp-0009o-integrated-early-exit-runtime
+Run from the repository root with the experiment dependencies installed. This runner is included on `main`.
 
-python scripts/run_exp0009o.py --questions 10 --train-questions 7 --max-new-tokens 128 --epochs 16 --bottleneck 128 --repeats 2 --warmup-tokens 16 --output "E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009O-Integrated-Early-Exit-Runtime"
+```powershell
+python scripts/run_exp0009o.py --questions 10 --train-questions 7 --max-new-tokens 128 --epochs 16 --bottleneck 128 --repeats 2 --warmup-tokens 16 --output ".cfi-data/Results/CFI-Eval-0009O-Integrated-Early-Exit-Runtime"
 ```
 
 

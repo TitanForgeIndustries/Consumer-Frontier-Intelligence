@@ -40,7 +40,7 @@ If those are not equivalent, there is an unexpected boundary or tensor represent
 
 Run:
 
-    python scripts/run_exp0009m.py --questions 2 --max-new-tokens 64 --output "E:\\Titan Forge Industries\\CFI-Data\\Results\\CFI-Eval-0009M-Layer-Boundary-Equivalence"
+    python scripts/run_exp0009m.py --questions 2 --max-new-tokens 64 --output ".cfi-data/Results/CFI-Eval-0009M-Layer-Boundary-Equivalence"
 
 ## Limits
 
@@ -66,7 +66,7 @@ Because a previous process experienced a CUDA device-side assert, start the test
 
 Begin with a one-question smoke run:
 
-    python scripts/run_exp0009m.py --questions 1 --max-new-tokens 32 --output "E:\\Titan Forge Industries\\CFI-Data\\Results\\CFI-Eval-0009M-Layer-Boundary-Equivalence-Smoke"
+    python scripts/run_exp0009m.py --questions 1 --max-new-tokens 32 --output ".cfi-data/Results/CFI-Eval-0009M-Layer-Boundary-Equivalence-Smoke"
 
 Only after the smoke run completes without an exception should the default 2-question control be run.
 
@@ -94,4 +94,4 @@ The earlier EXP-0009L direct H35-exit result is now inconsistent with this valid
 
 Run the full M control next before another architectural experiment:
 
-    python scripts/run_exp0009m.py --questions 2 --max-new-tokens 64 --output "E:\\Titan Forge Industries\\CFI-Data\\Results\\CFI-Eval-0009M-Layer-Boundary-Equivalence"
+    python scripts/run_exp0009m.py --questions 2 --max-new-tokens 64 --output ".cfi-data/Results/CFI-Eval-0009M-Layer-Boundary-Equivalence"

@@ -127,7 +127,7 @@ A larger follow-up can use:
 
 Default output:
 
-E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009C-Predictive-Depth-Sweep
+CFI_DATA_ROOT/Results/CFI-Eval-0009C-Predictive-Depth-Sweep
 
 Files:
 

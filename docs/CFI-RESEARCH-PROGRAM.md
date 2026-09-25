@@ -36,7 +36,7 @@ Use the same byte corpus, train/validation split, seed, sampled windows, optimiz
 ## Research discipline
 
 1. Preserve failures separately from scientific results; restart Python after a CUDA device-side assert.
-2. Bound initial jobs; keep corpora, checkpoints, caches, and generated results on `E:` and out of Git.
+2. Bound initial jobs; keep corpora, checkpoints, caches, and generated results under a local data root and out of tracked Git files.
 3. Do not claim wall-clock or VRAM wins from parameter arithmetic; all-resident sparse experts can cost *more* memory and latency.
 4. Before promoting paging, measure whether route locality, transfers, and hit rate actually support it.
 5. A tiny-corpus checkpoint is not evidence of general reasoning or frontier intelligence. The 2–4 week milestone can succeed while the broader thesis remains unresolved.

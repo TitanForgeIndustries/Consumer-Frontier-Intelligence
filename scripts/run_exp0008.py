@@ -9,6 +9,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from cfi_paths import data_path
 from typing import Any
 
 import torch
@@ -16,15 +17,9 @@ import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 
-DEFAULT_MODEL = Path(
-    r"E:\Titan Forge Industries\CFI-Data\HuggingFace\hub\models--Qwen--Qwen3-4B-Base\snapshots\906bfd4b4dc7f14ee4320094d8b41684abff8539"
-)
-DEFAULT_DATASET = Path(
-    r"E:\Titan Forge Industries\CFI-Data\Datasets\CFI-Eval-0001-GSM8K\gsm8k_test_100.jsonl"
-)
-DEFAULT_OUTPUT = Path(
-    r"E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0008-Causal-Sublayer-Ablation"
-)
+DEFAULT_MODEL = data_path("HuggingFace", "hub", "models--Qwen--Qwen3-4B-Base", "snapshots", "906bfd4b4dc7f14ee4320094d8b41684abff8539")
+DEFAULT_DATASET = data_path("Datasets", "CFI-Eval-0001-GSM8K", "gsm8k_test_100.jsonl")
+DEFAULT_OUTPUT = data_path("Results", "CFI-Eval-0008-Causal-Sublayer-Ablation")
 DEFAULT_LAYERS = (30, 35, 36)
 DEFAULT_COMPONENTS = ("attention", "mlp")
 

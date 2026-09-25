@@ -15,6 +15,7 @@ import copy
 import json
 import time
 from pathlib import Path
+from cfi_paths import data_path
 from typing import Any
 
 import torch
@@ -43,9 +44,7 @@ from run_exp0009o import (
 )
 
 
-DEFAULT_OUTPUT = Path(
-    r"E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009P-Matched-Greedy-Trajectory"
-)
+DEFAULT_OUTPUT = data_path("Results", "CFI-Eval-0009P-Matched-Greedy-Trajectory")
 
 
 def parse_args() -> argparse.Namespace:

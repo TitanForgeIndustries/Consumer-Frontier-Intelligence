@@ -16,21 +16,16 @@ import json
 import math
 import re
 from pathlib import Path
+from cfi_paths import data_path
 
 import torch
 import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 
-DEFAULT_MODEL = Path(
-    r"E:\Titan Forge Industries\CFI-Data\HuggingFace\hub\models--Qwen--Qwen3-4B-Base\snapshots\906bfd4b4dc7f14ee4320094d8b41684abff8539"
-)
-DEFAULT_DATASET = Path(
-    r"E:\Titan Forge Industries\CFI-Data\Datasets\CFI-Eval-0001-GSM8K\gsm8k_test_100.jsonl"
-)
-DEFAULT_OUTPUT = Path(
-    r"E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0005-FreeRunningAgreement"
-)
+DEFAULT_MODEL = data_path("HuggingFace", "hub", "models--Qwen--Qwen3-4B-Base", "snapshots", "906bfd4b4dc7f14ee4320094d8b41684abff8539")
+DEFAULT_DATASET = data_path("Datasets", "CFI-Eval-0001-GSM8K", "gsm8k_test_100.jsonl")
+DEFAULT_OUTPUT = data_path("Results", "CFI-Eval-0005-FreeRunningAgreement")
 
 
 def load_rows(path: Path, count: int) -> list[dict]:

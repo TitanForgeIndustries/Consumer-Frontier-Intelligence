@@ -5,6 +5,8 @@ Consumer Frontier Intelligence is an open-source research project investigating 
 
 Current research: [CFI program](docs/CFI-RESEARCH-PROGRAM.md), [v0 architecture](docs/CFI-V0-DESIGN.md), [EXP-0010 smoke](docs/experiments/EXP-0010-cfi-v0-smoke.md), and [EXP-0011 routing controls](docs/experiments/EXP-0011-route-collapse-capacity-control.md). The first original checkpoint runs without Qwen weights, but its tiny-corpus output is not useful language. Stronger balancing prevents route collapse; sparse execution remains slower and more memory-intensive than the same-active-width dense control.
 
+The near-term prototype target is an **independently trained CFI model that can write working code** on consumer hardware. No programming language is fixed yet. Success requires held-out executable coding tasks and measured local inference, not merely a runnable checkpoint. The existing tiny Shakespeare model is an engineering control, **not** a coding model or a frontier-capable release. This near-term focus does not change the longer-term consumer-frontier goal. See [local data and reproducibility](docs/REPRODUCIBILITY.md) for portable paths and historical artifact provenance.
+
 The long-term objective is ambitious:
 
 Develop an AI system capable of approaching frontier-model capabilities while remaining practical to run on ordinary consumer hardware.

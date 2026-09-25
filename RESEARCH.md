@@ -8,6 +8,8 @@ The project investigates whether frontier-level AI capability can be achieved wi
 
 The goal is not to make a smaller copy of an existing frontier model. The goal is to investigate whether a fundamentally different system can produce comparable capabilities while remaining practical on ordinary consumer hardware.
 
+**Near-term test:** an original, independently trained model that writes working code on local consumer hardware. Its coding ability must be evaluated on held-out executable tasks and weighed against measured memory, latency, and training cost. The EXP-0010/0011 byte-model controls do not yet demonstrate this ability or a sparse-efficiency advantage; the long-term frontier target remains open.
+
 ## 1. Core Research Question
 
 **Can a highly capable general-purpose AI system approach frontier-model capability while operating within the compute, memory, power, and cost constraints of consumer hardware?**

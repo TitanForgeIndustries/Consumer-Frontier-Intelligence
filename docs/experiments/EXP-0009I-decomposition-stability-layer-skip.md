@@ -64,7 +64,7 @@ Metrics:
 
 Smoke command:
 
-    python scripts/run_exp0009i.py --questions 4 --max-new-tokens 128 --output "E:\\Titan Forge Industries\\CFI-Data\\Results\\CFI-Eval-0009I-Decomposition-Stability-Layer-Skip"
+    python scripts/run_exp0009i.py --questions 4 --max-new-tokens 128 --output ".cfi-data/Results/CFI-Eval-0009I-Decomposition-Stability-Layer-Skip"
 
 ## Limits
 

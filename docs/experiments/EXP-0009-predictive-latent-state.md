@@ -139,7 +139,7 @@ For a broader first run after the smoke test:
 
 Default output directory:
 
-E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0009-Predictive-Latent-State
+CFI_DATA_ROOT/Results/CFI-Eval-0009-Predictive-Latent-State
 
 Expected files:
 

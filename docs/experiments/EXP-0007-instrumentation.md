@@ -91,7 +91,7 @@ These signals provide candidate controls for later adaptive-compute experiments.
 
 Default output:
 
-E:\Titan Forge Industries\CFI-Data\Results\CFI-Eval-0007-Instrumentation
+CFI_DATA_ROOT/Results/CFI-Eval-0007-Instrumentation
 
 Files:
 
@@ -116,12 +116,14 @@ The recovery script streams the JSONL file and rebuilds sublayer_summary.json.
 
 Run from the CFI repository environment:
 
-PowerShell:
+PowerShell from the repository root (set `CFI_DATA_ROOT` to another local volume if needed):
 
-$env:TEMP = "E:\Titan Forge Industries\CFI-Data\Temp"
-$env:TMP = "E:\Titan Forge Industries\CFI-Data\Temp"
-$env:HF_HOME = "E:\Titan Forge Industries\CFI-Data\HuggingFace"
-$env:HF_HUB_CACHE = "E:\Titan Forge Industries\CFI-Data\HuggingFace\hub"
+$env:CFI_DATA_ROOT = Join-Path (Get-Location) ".cfi-data"
+New-Item -ItemType Directory -Force (Join-Path $env:CFI_DATA_ROOT "Temp") | Out-Null
+$env:TEMP = Join-Path $env:CFI_DATA_ROOT "Temp"
+$env:TMP = $env:TEMP
+$env:HF_HOME = Join-Path $env:CFI_DATA_ROOT "HuggingFace"
+$env:HF_HUB_CACHE = Join-Path $env:HF_HOME "hub"
 
 python scripts/measure_exp0007.py
 

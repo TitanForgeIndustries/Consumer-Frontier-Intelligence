@@ -4,6 +4,8 @@
 
 This roadmap is intentionally research-driven. The project should move from measurable foundations to increasingly ambitious architectural experiments without assuming the final approach is known in advance.
 
+**Current prototype focus:** establish a reproducible, independently trained code-writing model with useful held-out executable-task performance and consumer-local inference. No language, release date, or architecture is guaranteed by the existing tiny-corpus smoke. Record data provenance, model/training cost, quality, latency, and memory before proposing promotion. The phases below describe research directions, not completed capabilities or a requirement to scale the unsuccessful sparse candidate.
+
 ## Phase 0: Repository and Research Infrastructure
 
 **Goal:** Make the project reproducible before attempting major model changes.
